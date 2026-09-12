@@ -2,14 +2,78 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AI Daily — Video Summarizer & AI News Digest</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧠</text></svg>" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>AI Daily — Video Summarizer & AI News</title>
+
+  <!-- PWA meta -->
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="AI Daily" />
+  <meta name="theme-color" content="#6c3fc5" />
+  <meta name="description" content="Summarize any video, reel, or article with AI. Works with YouTube, Instagram, Facebook, X, and more." />
+
+  <!-- Manifest -->
+  <link rel="manifest" href="manifest.json" />
+
+  <!-- Apple touch icons -->
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" sizes="192x192" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" sizes="512x512" href="icons/icon-512.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
+
+  <!-- Apple splash / startup -->
+  <meta name="apple-touch-fullscreen" content="yes" />
+
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <div id="app"></div>
+
+  <script>
+    // ── Register service worker ──────────────────────────────────
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/wise-ai-daily/sw.js', { scope: '/wise-ai-daily/' })
+        .then(reg => console.log('SW registered', reg.scope))
+        .catch(err => console.warn('SW failed', err));
+
+      // Listen for shared URLs from the service worker
+      navigator.serviceWorker.addEventListener('message', e => {
+        if (e.data?.type === 'SHARE_RECEIVED' && e.data.url) {
+          handleIncomingShare(e.data.url);
+        }
+      });
+    }
+
+    // ── Check for pending share from sessionStorage ──────────────
+    // (set by share.html redirect)
+    window.addEventListener('DOMContentLoaded', () => {
+      const pending = sessionStorage.getItem('pending-share');
+      if (pending) {
+        sessionStorage.removeItem('pending-share');
+        // Give app.js time to init first
+        setTimeout(() => handleIncomingShare(pending), 300);
+      }
+    });
+
+    // ── Also handle URL hash shares ──────────────────────────────
+    function handleIncomingShare(url) {
+      if (!url) return;
+      // Switch to Add URL tab and pre-fill the URL
+      if (typeof S !== 'undefined') {
+        S.tab = 'add';
+        S.urlInput = url;
+        S.urlResult = null;
+        S.urlError = '';
+        render();
+        // Auto-trigger summarize after a short delay
+        setTimeout(() => summarizeURL(), 400);
+      }
+    }
+    window.handleIncomingShare = handleIncomingShare;
+  </script>
+
   <script src="app.js"></script>
 </body>
 </html>

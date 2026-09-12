@@ -415,24 +415,41 @@ function buildFeed() {
 function buildAdd() {
   const r=S.urlResult;
   const isVideo=r&&['youtube','instagram','facebook'].includes(r.platform);
+  const isPWA=window.matchMedia('(display-mode:standalone)').matches||!!window.navigator.standalone;
   return `
-    <div class="tip-box">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-        <i class="ti ti-device-mobile" style="color:var(--brand);font-size:18px"></i>
-        <span style="font-size:13px;font-weight:500">Share from iPhone</span>
+    <div class="card" style="margin-bottom:12px;border-color:rgba(108,63,197,0.4);background:var(--bg-accent)">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+        <i class="ti ti-device-mobile" style="color:var(--brand);font-size:20px"></i>
+        <span style="font-size:14px;font-weight:600;color:var(--brand)">Share from iPhone — any app</span>
       </div>
-      <div style="font-size:13px;color:var(--text-secondary);margin-bottom:10px;line-height:1.5">
-        In any app tap <strong>Share → Copy Link</strong>, then paste below.
+      ${isPWA?`
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;gap:10px;align-items:flex-start"><span style="width:22px;height:22px;border-radius:50%;background:var(--brand);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">1</span><div style="font-size:13px;color:var(--text-secondary);line-height:1.5">Open any video in <strong>YouTube</strong>, <strong>Instagram</strong>, <strong>Facebook</strong>, <strong>X</strong>, Safari…</div></div>
+        <div style="display:flex;gap:10px;align-items:flex-start"><span style="width:22px;height:22px;border-radius:50%;background:var(--brand);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">2</span><div style="font-size:13px;color:var(--text-secondary);line-height:1.5">Tap the <strong>Share</strong> button ⎋</div></div>
+        <div style="display:flex;gap:10px;align-items:flex-start"><span style="width:22px;height:22px;border-radius:50%;background:var(--brand);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">3</span><div style="font-size:13px;color:var(--text-secondary);line-height:1.5">Scroll the share sheet and tap <strong>"AI Daily"</strong> — opens here and summarizes automatically ✨</div></div>
       </div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap">
-        <span class="tag t-yt"><i class="ti ti-brand-youtube"></i> YouTube</span>
-        <span class="tag t-ig"><i class="ti ti-brand-instagram"></i> Instagram</span>
-        <span class="tag t-fb"><i class="ti ti-brand-facebook"></i> Facebook</span>
-        <span class="tag t-tw"><i class="ti ti-brand-x"></i> X</span>
-        <span class="tag t-gh"><i class="ti ti-brand-github"></i> GitHub</span>
-        <span class="tag t-web"><i class="ti ti-world"></i> Articles</span>
+      <div style="margin-top:12px;padding:8px 12px;background:var(--bg-success);border-radius:8px;font-size:12px;color:var(--text-success);display:flex;align-items:center;gap:6px"><i class="ti ti-circle-check"></i> Installed — AI Daily appears in your iPhone share sheet</div>
+      `:`
+      <div style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;line-height:1.5">Install this app first so it appears in your iPhone share sheet:</div>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px">
+        <div style="display:flex;gap:10px;align-items:flex-start"><span style="width:22px;height:22px;border-radius:50%;background:var(--brand);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">1</span><div style="font-size:13px;color:var(--text-secondary);line-height:1.5">Open this page in <strong>Safari</strong> on your iPhone</div></div>
+        <div style="display:flex;gap:10px;align-items:flex-start"><span style="width:22px;height:22px;border-radius:50%;background:var(--brand);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">2</span><div style="font-size:13px;color:var(--text-secondary);line-height:1.5">Tap the <strong>Share</strong> button ⎋ at the bottom of Safari</div></div>
+        <div style="display:flex;gap:10px;align-items:flex-start"><span style="width:22px;height:22px;border-radius:50%;background:var(--brand);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">3</span><div style="font-size:13px;color:var(--text-secondary);line-height:1.5">Tap <strong>"Add to Home Screen"</strong> → <strong>Add</strong></div></div>
+        <div style="display:flex;gap:10px;align-items:flex-start"><span style="width:22px;height:22px;border-radius:50%;background:var(--brand);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">4</span><div style="font-size:13px;color:var(--text-secondary);line-height:1.5">Now open any reel/video → Share → tap <strong>"AI Daily"</strong> ✨</div></div>
       </div>
+      <div style="padding:8px 12px;background:var(--bg-warning);border-radius:8px;font-size:12px;color:var(--text-warning);display:flex;align-items:center;gap:6px"><i class="ti ti-info-circle"></i> Requires <strong>Safari</strong> on iPhone — Chrome won't show "Add to Home Screen"</div>
+      `}
     </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
+      <span style="font-size:12px;color:var(--text-muted);line-height:26px;margin-right:2px">Works with:</span>
+      <span class="tag t-yt"><i class="ti ti-brand-youtube"></i> YouTube</span>
+      <span class="tag t-ig"><i class="ti ti-brand-instagram"></i> Instagram</span>
+      <span class="tag t-fb"><i class="ti ti-brand-facebook"></i> Facebook</span>
+      <span class="tag t-tw"><i class="ti ti-brand-x"></i> X</span>
+      <span class="tag t-gh"><i class="ti ti-brand-github"></i> GitHub</span>
+      <span class="tag t-web"><i class="ti ti-world"></i> Any URL</span>
+    </div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px">Or paste a URL manually:</div>
     <div style="display:flex;gap:8px;margin-bottom:8px">
       <input class="input-field" type="url" placeholder="Paste any URL here…"
         value="${S.urlInput}"
@@ -570,3 +587,47 @@ function render() {
 
 // ── Boot ─────────────────────────────────────────────────────────
 init();
+
+// ── PWA Install prompt (shown once) ─────────────────────────────
+let deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  showInstallBanner();
+});
+
+function showInstallBanner() {
+  if (sg('install-dismissed')) return;
+  const banner = document.createElement('div');
+  banner.id = 'install-banner';
+  banner.style.cssText = `
+    position:fixed;bottom:0;left:0;right:0;z-index:200;
+    background:var(--brand);color:#fff;
+    padding:14px 16px;display:flex;align-items:center;gap:12px;
+    box-shadow:0 -4px 20px rgba(0,0,0,0.3);
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  `;
+  banner.innerHTML = `
+    <i class="ti ti-download" style="font-size:22px;flex-shrink:0"></i>
+    <div style="flex:1">
+      <div style="font-size:14px;font-weight:600">Install AI Daily</div>
+      <div style="font-size:12px;opacity:0.85">Add to home screen to share directly from any app</div>
+    </div>
+    <button onclick="installPWA()" style="background:#fff;color:var(--brand);border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;flex-shrink:0">Install</button>
+    <button onclick="dismissInstall()" style="background:none;border:none;color:#fff;opacity:0.7;cursor:pointer;font-size:20px;padding:4px;flex-shrink:0">✕</button>
+  `;
+  document.body.appendChild(banner);
+}
+
+function installPWA() {
+  if (deferredInstallPrompt) {
+    deferredInstallPrompt.prompt();
+    deferredInstallPrompt.userChoice.then(r => {
+      if (r.outcome === 'accepted') dismissInstall();
+    });
+  }
+}
+function dismissInstall() {
+  ss('install-dismissed', true);
+  document.getElementById('install-banner')?.remove();
+}
