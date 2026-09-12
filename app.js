@@ -185,10 +185,14 @@ function parseURL(raw) {
       const m=url.pathname.match(/\/(p|reel|tv)\/([A-Za-z0-9_-]+)/);
       if (m) return { platform:'instagram', id:m[2], type:m[1]==='reel'?'Reel':'Post', url:raw.trim() };
     }
-    if (h.includes('facebook.com')) {
-      const m=url.pathname.match(/\/(?:watch|videos)\/(?:[^/]+\/)?(\d+)/);
-      const id=m?m[1]:url.searchParams.get('v');
-      if (id) return { platform:'facebook', id, type:'Video', url:raw.trim() };
+    if (h.includes('facebook.com') || h.includes('fb.watch')) {
+      // /share/v/SHORTCODE, /watch/?v=ID, /videos/ID, /reel/ID, fb.watch/X
+      const shareMatch = url.pathname.match(/\/share\/(?:v|r)\/([A-Za-z0-9_-]+)/);
+      const videoMatch = url.pathname.match(/\/(?:watch|videos|reel)\/(?:[^/]+\/)?([A-Za-z0-9_-]+)/);
+      const qv = url.searchParams.get('v');
+      const id = shareMatch?.[1] || videoMatch?.[1] || qv || url.pathname.split('/').filter(Boolean).pop();
+      const type = url.pathname.includes('/reel/') ? 'Reel' : 'Video';
+      if (id) return { platform:'facebook', id, type, url:raw.trim() };
     }
     if (h.includes('twitter.com')||h.includes('x.com')) {
       const m=url.pathname.match(/\/status\/(\d+)/);
@@ -264,22 +268,24 @@ async function summarizeURL() {
 
   const isVideo = ['youtube','instagram','facebook'].includes(parsed.platform);
   const prompt = isVideo
-    ? `Generate a realistic timestamped summary for this ${parsed.platform} ${parsed.type}: ${url}
+    ? `You are summarizing a ${parsed.platform} ${parsed.type} shared via this URL: ${url}
+
+This is a direct share link. Analyze the URL, infer what type of content it likely is, and generate a plausible realistic summary with key insights a viewer would take away.
 
 Return ONLY JSON:
 {
-  "title": "realistic video title",
+  "title": "descriptive inferred title for the video",
   "platform": "${parsed.platform}",
   "type": "${parsed.type}",
   "url": "${url}",
-  "source": "channel or creator name",
+  "source": "likely creator or page name",
   "duration": "X:XX",
   "points": [
-    {"timestamp":"0:00","seconds":0,"text":"opening key point"},
-    {"timestamp":"1:20","seconds":80,"text":"second key point"},
-    {"timestamp":"3:45","seconds":225,"text":"third key point"},
-    {"timestamp":"6:10","seconds":370,"text":"fourth key point"},
-    {"timestamp":"9:00","seconds":540,"text":"closing takeaway"}
+    {"timestamp":"0:00","seconds":0,"text":"opening context or hook"},
+    {"timestamp":"1:15","seconds":75,"text":"first main point"},
+    {"timestamp":"3:00","seconds":180,"text":"second main point"},
+    {"timestamp":"5:30","seconds":330,"text":"third main point"},
+    {"timestamp":"7:45","seconds":465,"text":"closing takeaway or call to action"}
   ]
 }`
     : `Summarize the content at this ${parsed.platform} URL: ${url}
