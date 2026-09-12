@@ -7,7 +7,16 @@
 // ── Config ──────────────────────────────────────────────────────
 const GROQ_API = 'https://api.groq.com/openai/v1/chat/completions';
 const GROQ_SIGNUP = 'https://console.groq.com';
-const MODEL = 'llama-3.3-70b-versatile'; // free open-source model on Groq
+let MODEL = 'llama3-70b-8192'; // fallback; overridden after model fetch
+const MODEL_PRIORITY = [
+  'llama-3.3-70b-versatile',
+  'llama-3.1-70b-versatile',
+  'llama3-70b-8192',
+  'mixtral-8x7b-32768',
+  'llama3-8b-8192',
+  'gemma2-9b-it',
+  'gemma-7b-it',
+];
 const TODAY = new Date().toISOString().slice(0, 10);
 
 const PLATFORMS = {
@@ -26,6 +35,8 @@ const S = {
   apiKey: '',
   apiKeyValid: null, // null=unchecked, true=ok, false=err
   showSetup: false,
+  availableModels: [],
+  selectedModel: '',
   todayDigest: null,
   following: [],
   historyDates: [],
@@ -49,14 +60,47 @@ function sg(key) { try { const v=localStorage.getItem(key); return v ? JSON.pars
 function ss(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} }
 function sl(prefix) { const k=[]; for(let i=0;i<localStorage.length;i++){const x=localStorage.key(i);if(x&&x.startsWith(prefix))k.push(x);} return k; }
 
+// ── Fetch available models from Groq ─────────────────────────────
+async function fetchAvailableModels(key) {
+  try {
+    const res = await fetch('https://api.groq.com/openai/v1/models', {
+      headers: { 'Authorization': `Bearer ${key}` }
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.data || [])
+      .map(m => m.id)
+      .filter(id => !id.includes('whisper') && !id.includes('tts'))
+      .sort();
+  } catch { return []; }
+}
+
+function pickBestModel(available) {
+  for (const m of MODEL_PRIORITY) {
+    if (available.includes(m)) return m;
+  }
+  return available[0] || 'llama3-70b-8192';
+}
+
 // ── Init ─────────────────────────────────────────────────────────
-function init() {
+async function init() {
   S.apiKey       = sg('groq-api-key') || '';
   S.following    = sg('ai-following') || [];
   S.todayDigest  = sg('digest:' + TODAY);
   S.historyDates = sl('digest:').map(k=>k.replace('digest:','')).sort().reverse().filter(d=>d!==TODAY);
   S.showSetup    = !S.apiKey;
-  if (S.apiKey) S.apiKeyValid = true;
+  S.selectedModel = sg('selected-model') || '';
+
+  if (S.apiKey) {
+    S.apiKeyValid = true;
+    S.availableModels = await fetchAvailableModels(S.apiKey);
+    if (S.availableModels.length) {
+      MODEL = S.selectedModel && S.availableModels.includes(S.selectedModel)
+        ? S.selectedModel
+        : pickBestModel(S.availableModels);
+      S.selectedModel = MODEL;
+    }
+  }
   render();
 }
 
@@ -98,10 +142,28 @@ async function saveKey() {
   if (!key.startsWith('gsk_')) { S.loadError = 'Groq keys start with gsk_ — check and try again.'; render(); return; }
   S.apiKey = key;
   ss('groq-api-key', key);
-  S.showSetup = false;
-  S.apiKeyValid = true;
   S.loadError = '';
   S.tempKey = '';
+  S.showSetup = false;
+  render(); // show loading state
+
+  S.availableModels = await fetchAvailableModels(key);
+  if (S.availableModels.length) {
+    MODEL = pickBestModel(S.availableModels);
+    S.selectedModel = MODEL;
+    S.apiKeyValid = true;
+  } else {
+    S.apiKeyValid = false;
+    S.loadError = 'Could not fetch models — key may be invalid.';
+  }
+  render();
+}
+
+// ── Change model ─────────────────────────────────────────────────
+function changeModel(id) {
+  MODEL = id;
+  S.selectedModel = id;
+  ss('selected-model', id);
   render();
 }
 
@@ -329,7 +391,7 @@ function buildFeed() {
     ${!S.loading&&d?`
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
         <span style="font-size:12px;color:var(--text-muted)">Updated ${d.fetchedAt||''} · ${(d.items||[]).length} items</span>
-        <span class="model-badge">Llama 3.3 70B</span>
+        <span class="model-badge">${S.selectedModel||MODEL}</span>
       </div>
       ${renderItems(d.items)}
     `:''}`;
@@ -448,6 +510,10 @@ function render() {
 
   const statusCls = S.apiKey ? (S.apiKeyValid===false?'err':'ok') : '';
   const statusTxt = S.apiKey ? (S.apiKeyValid===false?'<i class="ti ti-alert-circle"></i> Key invalid':'<i class="ti ti-circle-check"></i> Groq connected') : '<i class="ti ti-key"></i> Set up API key';
+  const modelSel = S.availableModels.length ? `
+    <select class="select-field" onchange="changeModel(this.value)" style="font-size:11px;height:28px;padding:0 6px;border-radius:6px;max-width:180px" title="Active model">
+      ${S.availableModels.map(m=>`<option value="${m}" ${m===S.selectedModel?'selected':''}>${m}</option>`).join('')}
+    </select>` : '';
 
   let content='';
   if (S.tab==='feed')      content=buildFeed();
@@ -462,6 +528,7 @@ function render() {
         <div class="logo-mark"><i class="ti ti-brain" aria-hidden="true"></i></div>
         <div><div class="logo-name">AI Daily</div><div class="logo-sub">Powered by Llama 3 · Groq</div></div>
         <div class="header-right">
+          ${modelSel}
           <button class="api-status ${statusCls}" onclick="S.showSetup=true;S.tempKey='';render()">${statusTxt}</button>
         </div>
       </header>
