@@ -49,6 +49,10 @@ const S = {
   historyFilter: 'all', // 'all' | 'digests' | 'summaries'
   historySearch: '',
   urlSummaries: [],
+  showSnapshots: false,
+  activeSnapshots: {},
+  activePlayerMoments: {},
+  lightbox: null,
   loading: false,
   loadError: '',
   urlInput: '',
@@ -163,6 +167,7 @@ async function init() {
         timeRange: '2:36 - 10:35',
         timestamp: '2:36',
         seconds: 156,
+        snapshotUrl: 'snapshots/vwLVjHEGGK0/snap_156.jpg',
         summary: 'The session begins by observing the natural flow of the breath at the entrance of the nostrils to calm and focus the mind.',
         subPoints: [
           'Observe natural respiration: incoming breath, outgoing breath—as it is, without artificial regulation or deep breathing.',
@@ -175,6 +180,7 @@ async function init() {
         timeRange: '11:29 - 50:11',
         timestamp: '11:29',
         seconds: 689,
+        snapshotUrl: 'snapshots/vwLVjHEGGK0/snap_689.jpg',
         summary: 'The core practice involves scanning the body from the top of the head to the tips of the toes and back again. The goal is to observe sensations objectively, understanding the Law of Impermanence (Anicca).',
         subPoints: [
           'Equanimity (Samata): Avoid reacting with craving when experiencing pleasant sensations or aversion when feeling unpleasant sensations.',
@@ -187,6 +193,7 @@ async function init() {
         timeRange: '54:06 - 1:02:48',
         timestamp: '54:06',
         seconds: 3246,
+        snapshotUrl: 'snapshots/vwLVjHEGGK0/snap_3011.jpg',
         summary: 'The session concludes with the practice of loving-kindness (Metta) and goodwill towards all living beings.',
         subPoints: [
           'Radiate the peaceful, harmonious vibrations generated during the sitting to all surrounding beings.',
@@ -225,6 +232,7 @@ async function init() {
         timeRange: '0:00 - 1:05',
         timestamp: '0:00',
         seconds: 0,
+        snapshotUrl: 'snapshots/Qsi9MeLh95Q/snap_65.jpg',
         summary: 'Why AI video channels fail due to face mutations, broken storylines, and paywalls, and how this zero-cost automation pipeline fixes it.',
         subPoints: [
           'Paywalls like Grok and Midjourney make long-form video production unsustainable on a budget.',
@@ -236,6 +244,7 @@ async function init() {
         timeRange: '1:05 - 2:08',
         timestamp: '1:05',
         seconds: 65,
+        snapshotUrl: 'snapshots/Qsi9MeLh95Q/snap_65.jpg',
         summary: 'Uses Google Gemini to generate the complete narrative story structure and detailed visual prompts based on master templates.',
         subPoints: [
           'Master prompt breaks down the plot into chronological scene-by-scene script beats.',
@@ -247,6 +256,7 @@ async function init() {
         timeRange: '2:50 - 3:55',
         timestamp: '2:50',
         seconds: 170,
+        snapshotUrl: 'snapshots/Qsi9MeLh95Q/snap_170.jpg',
         summary: 'Generates anchor character images using Google Flow to ensure faces remain consistent throughout the project.',
         subPoints: [
           'Generates 16:9 high-resolution anchor character portraits with fixed facial geometry.',
@@ -258,6 +268,7 @@ async function init() {
         timeRange: '4:00 - 5:50',
         timestamp: '4:00',
         seconds: 240,
+        snapshotUrl: 'snapshots/Qsi9MeLh95Q/snap_240.jpg',
         summary: 'Utilizes the Autoflow Chrome extension to automate the batch creation of consistent images.',
         subPoints: [
           'Feeds anchor portraits and scene prompts directly into Autoflow for non-stop batch generation.',
@@ -269,6 +280,7 @@ async function init() {
         timeRange: '6:00 - 8:46',
         timestamp: '6:00',
         seconds: 360,
+        snapshotUrl: 'snapshots/Qsi9MeLh95Q/snap_360.jpg',
         summary: 'Employs Meta AI combined with the Meta Automation extension to animate static images into video clips.',
         subPoints: [
           'Injects customized camera motion prompts (pan, tilt, zoom, dolly) for cinematic feel.',
@@ -280,6 +292,7 @@ async function init() {
         timeRange: '9:10 - 10:48',
         timestamp: '9:10',
         seconds: 550,
+        snapshotUrl: 'snapshots/Qsi9MeLh95Q/snap_526.jpg',
         summary: 'Integrates Google AI Studio (Gemini 2.5 Pro single speaker audio) and Gemini audio prompts for royalty-free background audio.',
         subPoints: [
           'Studio-grade expressive narration generated with natural cadence and tone.',
@@ -291,6 +304,7 @@ async function init() {
         timeRange: '10:50 - 11:51',
         timestamp: '10:50',
         seconds: 650,
+        snapshotUrl: 'snapshots/Qsi9MeLh95Q/snap_526.jpg',
         summary: 'Leverages Google Vids (Veo 3.1) for high-complexity action sequences with zero cost.',
         subPoints: [
           '10-12 free daily generations for complex physics action shots where simple motion models struggle.',
@@ -333,6 +347,7 @@ async function init() {
         timeRange: '0:00 - 1:40',
         timestamp: '0:00',
         seconds: 0,
+        snapshotUrl: 'snapshots/PEEBZwGetyc/snap_0.jpg',
         summary: 'Overview of why traditional text-to-video AI burns enormous credit budgets due to random camera drift and lighting inconsistencies.',
         subPoints: [
           'Raw prompting forces creators to re-roll generations 10-20 times for a single usable angle.',
@@ -344,6 +359,7 @@ async function init() {
         timeRange: '1:40 - 2:50',
         timestamp: '1:40',
         seconds: 100,
+        snapshotUrl: 'snapshots/PEEBZwGetyc/snap_100.jpg',
         summary: 'Installing and connecting the Higgsfield AI Blender plugin with OpenAI Codex Computer Use.',
         subPoints: [
           'Codex interprets natural language instructions and executes Python API commands in Blender.',
@@ -355,6 +371,7 @@ async function init() {
         timeRange: '2:50 - 5:45',
         timestamp: '2:50',
         seconds: 170,
+        snapshotUrl: 'snapshots/PEEBZwGetyc/snap_170.jpg',
         summary: 'Step-by-step assembly of a photorealistic earbuds product commercial using procedural lighting and camera rigging.',
         subPoints: [
           'Setting up three-point studio lighting and turntable camera movement.',
@@ -366,6 +383,7 @@ async function init() {
         timeRange: '5:45 - 7:40',
         timestamp: '5:45',
         seconds: 345,
+        snapshotUrl: 'snapshots/PEEBZwGetyc/snap_345.jpg',
         summary: 'Direct cost and quality comparison showing how previz guidance saves 92% of generation credits.',
         subPoints: [
           'Prompt-only generations required 120 credits across failed takes to get one coherent shot.',
@@ -377,6 +395,7 @@ async function init() {
         timeRange: '7:40 - 11:00',
         timestamp: '7:40',
         seconds: 460,
+        snapshotUrl: 'snapshots/PEEBZwGetyc/snap_460.jpg',
         summary: 'Reusing a single previz setup across cosmetics, tech devices, and beverages while capturing handheld phone motion.',
         subPoints: [
           'Swap 3D asset in center while keeping identical lighting, camera move, and render pipeline.',
@@ -388,6 +407,7 @@ async function init() {
         timeRange: '11:00 - 16:15',
         timestamp: '11:00',
         seconds: 660,
+        snapshotUrl: 'snapshots/PEEBZwGetyc/snap_660.jpg',
         summary: 'Creating a seamless 30-second unbroken cinematic shot and comparing benchmark results against Fable 5.1.',
         subPoints: [
           'Continuous camera flight path through multiple commercial environments without cutting.',
@@ -756,6 +776,64 @@ function copySummaryText(btn, id) {
   }
 }
 
+function resolveAssetUrl(rel) {
+  if (!rel) return '';
+  if (rel.startsWith('http://') || rel.startsWith('https://') || rel.startsWith('data:')) return rel;
+  if (rel.startsWith('/')) return rel;
+  const base = location.pathname.endsWith('/')
+    ? location.pathname
+    : location.pathname.substring(0, location.pathname.lastIndexOf('/') + 1);
+  return base + rel;
+}
+
+function toggleAllSnapshots(cardId) {
+  S.showSnapshots = !S.showSnapshots;
+  render();
+}
+
+function togglePhaseSnapshot(cardId, idx) {
+  const key = `${cardId}_${idx}`;
+  S.activeSnapshots[key] = !S.activeSnapshots[key];
+  render();
+}
+
+function playSnapshotMoment(cardId, idx) {
+  const key = `${cardId}_${idx}`;
+  S.activePlayerMoments[key] = true;
+  render();
+}
+
+function closeSnapshotPlayer(cardId, idx) {
+  const key = `${cardId}_${idx}`;
+  delete S.activePlayerMoments[key];
+  render();
+}
+
+function openLightbox(url, title) {
+  S.lightbox = { url, title };
+  render();
+}
+
+function closeLightbox() {
+  S.lightbox = null;
+  render();
+}
+
+function buildLightbox() {
+  if (!S.lightbox) return '';
+  return `
+    <div class="lightbox-overlay" onclick="closeLightbox()">
+      <div class="lightbox-modal" onclick="event.stopPropagation()">
+        <div class="lightbox-header">
+          <span style="font-weight:600;font-size:14px;color:#fff">${S.lightbox.title || 'Key Moment Snapshot'}</span>
+          <button class="btn-ghost" style="color:#fff;border-color:rgba(255,255,255,0.3);padding:2px 8px" onclick="closeLightbox()"><i class="ti ti-x"></i></button>
+        </div>
+        <img src="${S.lightbox.url}" class="lightbox-img" alt="${S.lightbox.title || ''}" />
+      </div>
+    </div>
+  `;
+}
+
 function normalizeSummaryOutput(raw, parsed, cleanTitle, videoAuthor, url) {
   const res = { ...raw };
   if (cleanTitle && (!res.title || res.title === 'Video Summary' || res.title === 'Page Summary')) {
@@ -774,12 +852,28 @@ function normalizeSummaryOutput(raw, parsed, cleanTitle, videoAuthor, url) {
   // Ensure phases array
   if (!Array.isArray(res.phases)) res.phases = [];
 
-  // Filter out any placeholder texts from phases
+  // Filter out placeholder texts & compute seconds + snapshotUrl
   const placeholderRegex = /^(opening context|first main point|second main point|third main point|closing takeaway|insight \d|hook|phase name)/i;
   res.phases = res.phases.filter(p => {
     const t = (p.title || '').trim();
     const s = (p.summary || '').trim();
     return !placeholderRegex.test(t) && !placeholderRegex.test(s);
+  }).map((p, idx) => {
+    let sec = (typeof p.seconds === 'number') ? p.seconds : undefined;
+    if (sec === undefined && p.timestamp) {
+      const parts = String(p.timestamp).split(':').map(Number);
+      if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+        sec = parts[0] * 60 + parts[1];
+      } else if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+        sec = parts[0] * 3600 + parts[1] * 60 + parts[2];
+      }
+    }
+    const finalSec = sec !== undefined ? sec : 0;
+    return {
+      ...p,
+      seconds: finalSec,
+      snapshotUrl: p.snapshotUrl || (parsed.platform === 'youtube' && parsed.id ? `snapshots/${parsed.id}/snap_${finalSec}.jpg` : null)
+    };
   });
 
   // Ensure points array exists for backwards compatibility
@@ -1240,17 +1334,80 @@ function renderSummaryCard(r, id = null, opts = {}) {
       </div>
     ` : ''}
 
-    <!-- Rich Phases / Milestones -->
+    <!-- Rich Phases / Milestones with Key Moment Snapshots -->
     ${hasPhases ? `
-      <div class="phases-title"><i class="ti ti-timeline"></i> Key Phases & Workflow</div>
-      ${r.phases.map(p => {
+      <div style="display:flex;align-items:center;justify-content:space-between;margin:18px 0 10px 0;flex-wrap:wrap;gap:8px">
+        <div class="phases-title" style="margin:0"><i class="ti ti-timeline"></i> Key Phases & Workflow</div>
+        ${isVideo ? `
+          <button class="btn-snapshot-toggle ${S.showSnapshots ? 'active' : ''}" onclick="toggleAllSnapshots('${cardId}')" title="Toggle visual snapshots for all key moments">
+            <i class="ti ti-camera"></i> <span>${S.showSnapshots ? 'Hide Key Snapshots' : '📸 Show Key Moment Snapshots'}</span>
+          </button>
+        ` : ''}
+      </div>
+      ${r.phases.map((p, idx) => {
         const timeRange = p.timeRange || p.timestamp || '';
         const jumpHref = (r.platform === 'youtube' && p.seconds !== undefined) ? `${r.url}&t=${p.seconds}s` : r.url;
+        const snapshotKey = `${cardId}_${idx}`;
+        const isSnapshotOpen = S.showSnapshots || !!S.activeSnapshots[snapshotKey];
+        const isPlaying = !!S.activePlayerMoments[snapshotKey];
+        const parsedUrl = parseURL(r.url || '');
+        const youtubeId = (r.platform === 'youtube') ? (p.videoId || r.id || parsedUrl?.id) : null;
+        const snapshotImg = p.snapshotUrl 
+          ? resolveAssetUrl(p.snapshotUrl) 
+          : (youtubeId && p.seconds !== undefined ? resolveAssetUrl(`snapshots/${youtubeId}/snap_${p.seconds}.jpg`) : null);
+
         return `<div class="phase-card">
           <div class="phase-header">
             ${timeRange ? `<a class="ts-pill" href="${jumpHref}" target="_blank" rel="noopener" title="Jump to timestamp in video"><i class="ti ti-player-play"></i> ${timeRange}</a>` : ''}
+            ${isVideo ? `
+              <button class="ts-pill btn-snapshot-pill ${isSnapshotOpen ? 'active' : ''}" onclick="togglePhaseSnapshot('${cardId}', ${idx})" title="Show/hide snapshot of this key moment">
+                <i class="ti ti-camera"></i> Snapshot
+              </button>
+            ` : ''}
             <span class="phase-name">${renderMarkdown(p.title || 'Phase')}</span>
           </div>
+
+          ${(isVideo && isSnapshotOpen) ? `
+            <div class="moment-snapshot-box">
+              ${isPlaying && youtubeId ? `
+                <div class="snapshot-video-wrapper">
+                  <iframe class="snapshot-iframe" src="https://www.youtube-nocookie.com/embed/${youtubeId}?start=${p.seconds || 0}&autoplay=1&rel=0" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                  <div style="display:flex;justify-content:flex-end;margin-top:6px;padding:4px 8px">
+                    <button class="btn-ghost" style="padding:2px 8px;font-size:11px" onclick="closeSnapshotPlayer('${cardId}', ${idx})">
+                      <i class="ti ti-x"></i> Close Video
+                    </button>
+                  </div>
+                </div>
+              ` : `
+                <div class="snapshot-media-wrapper">
+                  ${snapshotImg ? `
+                    <img src="${snapshotImg}" alt="${p.title}" class="snapshot-img" loading="lazy" onerror="this.onerror=null;this.src='https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg'" onclick="openLightbox('${snapshotImg}', '${(p.title || '').replace(/'/g, "\\'")}')" />
+                  ` : (youtubeId ? `
+                    <img src="https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg" alt="${p.title}" class="snapshot-img" loading="lazy" />
+                  ` : '')}
+                  <div class="snapshot-overlay">
+                    <span class="snapshot-badge"><i class="ti ti-clock"></i> ${timeRange}</span>
+                    <div style="display:flex;gap:6px">
+                      ${youtubeId ? `
+                        <button class="snapshot-action-btn" onclick="playSnapshotMoment('${cardId}', ${idx})" title="Watch this moment">
+                          <i class="ti ti-player-play"></i> Play Moment
+                        </button>
+                      ` : ''}
+                      ${snapshotImg ? `
+                        <button class="snapshot-action-btn" onclick="openLightbox('${snapshotImg}', '${(p.title || '').replace(/'/g, "\\'")}')" title="Zoom snapshot">
+                          <i class="ti ti-zoom-in"></i> Zoom
+                        </button>
+                      ` : ''}
+                    </div>
+                  </div>
+                </div>
+              `}
+              <div class="snapshot-caption">
+                <i class="ti ti-sparkles" style="color:var(--brand)"></i> <span><strong>Key Moment:</strong> ${renderMarkdown(p.title || '')} (${timeRange})</span>
+              </div>
+            </div>
+          ` : ''}
+
           ${p.summary ? `<div class="phase-summary">${renderMarkdown(p.summary)}</div>` : ''}
           ${Array.isArray(p.subPoints) && p.subPoints.length ? `
             <div class="sub-points-list">
@@ -1548,6 +1705,7 @@ function render() {
 
   document.getElementById('app').innerHTML = `
     ${S.showSetup?buildSetup():''}
+    ${buildLightbox()}
     <div class="shell">
       <header class="header">
         <div class="logo-mark"><i class="ti ti-brain"></i></div>
