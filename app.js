@@ -491,16 +491,93 @@ async function init() {
     ]
   };
 
+  const seedNeemKaroliBaba = {
+    id: 'sum-seed-neemkaroli',
+    canonicalKey: 'youtube:ewgAKF9j__o',
+    title: 'Neem Karoli Baba’s Incredible Capabilities | Sadhguru',
+    platform: 'youtube',
+    type: 'Video',
+    url: 'https://youtu.be/ewgAKF9j__o',
+    source: 'Sadhguru',
+    duration: '4:06',
+    date: TODAY,
+    createdAt: new Date().toISOString(),
+    overview: 'In this discourse, Sadhguru recounts the historic encounter between Harvard psychologist Dr. Richard Alpert (Ram Dass) and the Indian mystic Neem Karoli Baba (Maharaj-ji). Looking for a spiritual shortcut through psychedelics, Ram Dass offered Baba a massive dose of LSD, only to witness Baba consume it with absolute equanimity and zero physical or psychological effect—demonstrating that true spiritual mastery stems from inner stability and capability rather than external chemical stimulation.',
+    takeaways: [
+      'External chemical substances can only distort sensory perception temporarily; genuine spiritual awakening requires stable inner mastery.',
+      'Neem Karoli Baba demonstrated that an established yogic state remains completely untouched by heavy doses of psychedelics.',
+      'True spiritual capability is measured by lived inner stability and ease, not intellectual theories or chemical experimentation.',
+      'Direct presence with an authentic, capable master shifts a seeker’s trajectory far more permanently than any shortcut.'
+    ],
+    phases: [
+      {
+        title: 'Ram Dass & The Quest for Chemical Shortcuts',
+        timeRange: '0:00 - 1:15',
+        timestamp: '0:00',
+        seconds: 0,
+        snapshotUrl: 'snapshots/ewgAKF9j__o/snap_0.jpg',
+        summary: 'Sadhguru introduces Dr. Richard Alpert (Ram Dass), a Harvard professor who traveled to India with pure LSD believing chemical shortcuts could replace disciplined spiritual practice.',
+        subPoints: [
+          'Ram Dass arrived in the Himalayas seeking a master who could validate or explain his psychedelic experiences.',
+          'He carried medical-grade LSD intending to test spiritual adepts and discover if enlightenment could be chemically triggered.'
+        ]
+      },
+      {
+        title: 'Meeting Neem Karoli Baba & The LSD Challenge',
+        timeRange: '1:15 - 2:30',
+        timestamp: '1:15',
+        seconds: 75,
+        snapshotUrl: 'snapshots/ewgAKF9j__o/snap_75.jpg',
+        summary: 'Ram Dass meets Neem Karoli Baba and offers him a massive dose of LSD to see how an authentic yogic master reacts.',
+        subPoints: [
+          'Baba asks for the entire supply and casually consumes enough LSD to incapacitate several adult men.',
+          'Ram Dass watches intensely for hours expecting pupil dilation, disorientation, or ecstasy.'
+        ]
+      },
+      {
+        title: 'Unshakable Equanimity & Inner Mastery',
+        timeRange: '2:30 - 3:30',
+        timestamp: '2:30',
+        seconds: 150,
+        snapshotUrl: 'snapshots/ewgAKF9j__o/snap_150.jpg',
+        summary: 'Baba exhibits zero psychological or physical alteration, effortlessly carrying on normal conversations without the slightest tremor in his awareness.',
+        subPoints: [
+          'Baba points out that while chemicals may offer temporary glimpses, they remain dependent on external conditions and fade quickly.',
+          'The master’s mind already rests in a baseline state far beyond what any chemical compound can induce.'
+        ]
+      },
+      {
+        title: 'Capability Over Knowledge & Spiritual Awakening',
+        timeRange: '3:30 - 4:06',
+        timestamp: '3:30',
+        seconds: 210,
+        snapshotUrl: 'snapshots/ewgAKF9j__o/snap_210.jpg',
+        summary: 'Witnessing genuine mastery transforms Ram Dass, prompting him to discard chemical reliance in favor of authentic inner sadhana and guru devotion.',
+        subPoints: [
+          'Sadhguru concludes that true tantra and spirituality are defined by lived inner capability rather than intellectual theories.',
+          'Direct presence with an awakened master shifts consciousness far more permanently than any shortcut.'
+        ]
+      }
+    ],
+    points: [
+      { timestamp: "0:00", seconds: 0, text: "Ram Dass & Chemical Shortcuts (0:00 - 1:15): Journeying to India with LSD in search of a guru." },
+      { timestamp: "1:15", seconds: 75, text: "The LSD Challenge (1:15 - 2:30): Handing Baba a massive dose to test his state." },
+      { timestamp: "2:30", seconds: 150, text: "Unshakable Equanimity (2:30 - 3:30): Baba consumes the drug with zero physical or mental effect." },
+      { timestamp: "3:30", seconds: 210, text: "Capability Over Knowledge (3:30 - 4:06): Transforming Ram Dass from shortcut-seeker to sincere disciple." }
+    ]
+  };
+
   // Register in persistent url-cache store
   ss('url-cache:youtube:vwLVjHEGGK0', seedVipassana);
   ss('url-cache:youtube:Qsi9MeLh95Q', seedAiVideo);
   ss('url-cache:youtube:PEEBZwGetyc', seedAstra);
+  ss('url-cache:youtube:ewgAKF9j__o', seedNeemKaroliBaba);
 
   // Upgrade or seed S.urlSummaries with latest rich seeds
   const otherSummaries = (S.urlSummaries || []).filter(s => 
-    !(s.url || '').includes('vwLVjHEGGK0') && !(s.url || '').includes('Qsi9MeLh95Q') && !(s.url || '').includes('PEEBZwGetyc')
+    !(s.url || '').includes('vwLVjHEGGK0') && !(s.url || '').includes('Qsi9MeLh95Q') && !(s.url || '').includes('PEEBZwGetyc') && !(s.url || '').includes('ewgAKF9j__o')
   );
-  S.urlSummaries = [seedAstra, seedVipassana, seedAiVideo, ...otherSummaries];
+  S.urlSummaries = [seedNeemKaroliBaba, seedAstra, seedVipassana, seedAiVideo, ...otherSummaries];
   ss('ai-summaries', S.urlSummaries);
 
   refreshHistoryDates();
@@ -885,6 +962,13 @@ function getPhaseSnapshotUrl(p, youtubeId, idx = 0) {
     return resolveAssetUrl('snapshots/vwLVjHEGGK0/snap_3011.jpg');
   }
 
+  if (youtubeId === 'ewgAKF9j__o') {
+    if (sec < 60) return resolveAssetUrl('snapshots/ewgAKF9j__o/snap_0.jpg');
+    if (sec < 120) return resolveAssetUrl('snapshots/ewgAKF9j__o/snap_75.jpg');
+    if (sec < 180) return resolveAssetUrl('snapshots/ewgAKF9j__o/snap_150.jpg');
+    return resolveAssetUrl('snapshots/ewgAKF9j__o/snap_210.jpg');
+  }
+
   if (p && p.snapshotUrl && !p.snapshotUrl.includes('undefined')) {
     return resolveAssetUrl(p.snapshotUrl);
   }
@@ -897,6 +981,97 @@ function getPhaseSnapshotUrl(p, youtubeId, idx = 0) {
   // For other videos without local snapshots, use YouTube scene frame snapshots (1.jpg, 2.jpg, 3.jpg)
   const frameNum = (idx % 3) + 1;
   return `https://img.youtube.com/vi/${youtubeId}/${frameNum}.jpg`;
+}
+
+function parseDurationToSeconds(str) {
+  if (!str) return null;
+  const cleaned = String(str).trim();
+  const parts = cleaned.split(':').map(Number);
+  if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+    return parts[0] * 60 + parts[1];
+  }
+  if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+    return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  }
+  // Check for "4m" or "4m 6s"
+  const mMatch = cleaned.match(/^(\d+)\s*m(?:in)?(?:\s*(\d+)\s*s)?/i);
+  if (mMatch) {
+    return parseInt(mMatch[1], 10) * 60 + (mMatch[2] ? parseInt(mMatch[2], 10) : 0);
+  }
+  return null;
+}
+
+function formatSecondsToTimestamp(sec) {
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m}:${s < 10 ? '0' : ''}${s}`;
+}
+
+function scalePhasesToDuration(phases, targetDurationSec) {
+  if (!phases || !phases.length || !targetDurationSec) return phases;
+  
+  let currentMax = 0;
+  phases.forEach(p => {
+    if (typeof p.seconds === 'number' && p.seconds > currentMax) currentMax = p.seconds;
+    if (p.timeRange) {
+      const parts = p.timeRange.split('-');
+      if (parts[1]) {
+        const sec = parseDurationToSeconds(parts[1]);
+        if (sec && sec > currentMax) currentMax = sec;
+      }
+    }
+  });
+
+  if (currentMax <= targetDurationSec && currentMax > targetDurationSec * 0.75) {
+    return phases; // Already within realistic bounds
+  }
+
+  const ratio = currentMax > 0 ? (targetDurationSec / currentMax) : 1;
+
+  return phases.map((p, i) => {
+    const newStartSec = Math.floor((p.seconds || 0) * ratio);
+    const nextPhase = phases[i + 1];
+    const nextStartSec = nextPhase ? Math.floor((nextPhase.seconds || 0) * ratio) : targetDurationSec;
+    const newRange = `${formatSecondsToTimestamp(newStartSec)} - ${formatSecondsToTimestamp(nextStartSec)}`;
+    return {
+      ...p,
+      seconds: newStartSec,
+      timestamp: formatSecondsToTimestamp(newStartSec),
+      timeRange: newRange
+    };
+  });
+}
+
+function adjustSummaryDuration(cardId) {
+  const summary = S.urlSummaries.find(s => (s.id || s.canonicalKey) === cardId) || S.urlResult;
+  if (!summary) return;
+
+  const currentDur = summary.duration || '';
+  const input = prompt('Enter actual video duration (e.g. 4:06 or 12:30):', currentDur);
+  if (!input) return;
+
+  const targetSec = parseDurationToSeconds(input);
+  if (!targetSec || targetSec <= 0) {
+    alert('Please enter a valid duration like 4:06 or 15:30');
+    return;
+  }
+
+  summary.duration = formatSecondsToTimestamp(targetSec);
+  if (Array.isArray(summary.phases) && summary.phases.length) {
+    summary.phases = scalePhasesToDuration(summary.phases, targetSec);
+  }
+
+  // Update points as well
+  if (Array.isArray(summary.points) && summary.points.length && summary.phases.length) {
+    summary.points = summary.phases.map(p => ({
+      timestamp: p.timestamp || '0:00',
+      seconds: p.seconds || 0,
+      text: `${p.title ? p.title + ': ' : ''}${p.summary || ''}`
+    }));
+  }
+
+  saveSummaryToCache(summary);
+  render();
 }
 
 function toggleAllSnapshots(cardId) {
@@ -1005,6 +1180,18 @@ function normalizeSummaryOutput(raw, parsed, cleanTitle, videoAuthor, url) {
       snapshotUrl: getPhaseSnapshotUrl({ ...p, seconds: finalSec }, yId, idx)
     };
   });
+
+  // Scale phases proportionally if they exceed duration
+  const targetDurationSec = parseDurationToSeconds(S.urlDuration) || parseDurationToSeconds(res.duration);
+  if (targetDurationSec && targetDurationSec > 0 && res.phases.length > 0) {
+    res.duration = formatSecondsToTimestamp(targetDurationSec);
+    res.phases = scalePhasesToDuration(res.phases, targetDurationSec);
+    const yId = (parsed.platform === 'youtube' && parsed.id) ? parsed.id : null;
+    res.phases = res.phases.map((p, idx) => ({
+      ...p,
+      snapshotUrl: getPhaseSnapshotUrl(p, yId, idx)
+    }));
+  }
 
   // Ensure points array exists for backwards compatibility
   if (!Array.isArray(res.points) || res.points.length === 0) {
@@ -1193,17 +1380,30 @@ async function summarizeURL(forceRefresh = false) {
   const cleanTitle = rawTitle.replace(/\s*-\s*YouTube$/i, '').trim();
   const videoAuthor = videoMeta?.author_name || '';
 
+  const userDurationSec = parseDurationToSeconds(S.urlDuration);
+  const durationInstruction = userDurationSec
+    ? `ACTUAL VIDEO DURATION: ${formatSecondsToTimestamp(userDurationSec)} (${userDurationSec} seconds). ALL phases and timestamps MUST be strictly contained between 0:00 and ${formatSecondsToTimestamp(userDurationSec)}. The final phase MUST conclude at or before ${formatSecondsToTimestamp(userDurationSec)}. NEVER generate timestamps beyond this.`
+    : `CRITICAL DURATION & PHASE SIZING RULES:
+1. DEDUCE REALISTIC DURATION: Carefully infer the realistic video length from the title, creator, and format. Single-topic clips, story excerpts, and short talks (e.g. Sadhguru stories, TED-Ed clips, Shorts) are usually 3 to 6 minutes long (e.g. ~4:06), NOT 12+ minutes!
+2. PHASE COUNT:
+   - For short videos (< 6 minutes): Generate ONLY 2 to 4 phases. DO NOT stretch short clips into long videos! All timestamps MUST stay strictly within the clip duration.
+   - For standard videos (6-15 mins): Generate 3 to 5 phases.
+   - For long videos (15+ mins): Generate 5 to 7 phases.
+3. STRICT TIMESTAMPS: Every phase timestamp MUST stay within the realistic duration. The final phase MUST conclude at or before the video end time.`;
+
   const prompt = isVideo
     ? `You are an elite video summarizer and research analyst. Produce an authoritative, comprehensive, deeply technical and highly structured summary of this video:
 URL: ${url}
 Title: "${cleanTitle || 'Video'}"
 ${videoAuthor ? `Channel / Creator: "${videoAuthor}"` : ''}
 
+${durationInstruction}
+
 GOAL: Produce an insightful, structured summary that feels like an expert breakdown.
 1. Executive Overview: 2-3 sentences explaining what this video is about, the creator's core methodology or thesis, and who benefits from it.
-2. Key Phases / Chapters: Break down the video into 4 to 8 sequential phases or topics. For each phase provide:
+2. Key Phases / Chapters: Break down the video into sequential phases matching the actual duration:
    - "title": Descriptive, meaningful chapter name
-   - "timeRange": e.g. "0:00 - 2:30" (or approximate if unknown)
+   - "timeRange": e.g. "0:00 - 1:30" (MUST strictly stay within actual video length)
    - "timestamp": Start timestamp e.g. "0:00"
    - "seconds": Start time in seconds (integer)
    - "summary": 2-3 sentences explaining the concepts, tools, or techniques demonstrated
@@ -1221,7 +1421,7 @@ Return ONLY valid JSON (no markdown fences, no extra text):
   "type": "${parsed.type}",
   "url": "${url}",
   "source": "${(videoAuthor || 'Creator').replace(/"/g, '\\"')}",
-  "duration": "estimated duration e.g. 15:00 or 1:02:48",
+  "duration": "${userDurationSec ? formatSecondsToTimestamp(userDurationSec) : 'realistic duration e.g. 4:06 or 12:30'}",
   "overview": "2-3 sentence executive overview of what this video teaches and who it is for",
   "takeaways": [
     "Core principle or insight 1",
@@ -1231,7 +1431,7 @@ Return ONLY valid JSON (no markdown fences, no extra text):
   "phases": [
     {
       "title": "Phase Name",
-      "timeRange": "0:00 - 3:15",
+      "timeRange": "0:00 - 1:30",
       "timestamp": "0:00",
       "seconds": 0,
       "summary": "Detailed summary of what happens in this phase without trailing dots",
@@ -1478,11 +1678,17 @@ function buildAdd() {
     </button>
 
     <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px">Or type/paste a URL manually:</div>
-    <div style="display:flex;gap:8px;margin-bottom:8px">
+    <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
       <input class="input-field" type="url" placeholder="Paste any URL here…"
         value="${S.urlInput}"
         oninput="S.urlInput=this.value;S.urlError=''"
-        onkeydown="if(event.key==='Enter')summarizeURL(false)" />
+        onkeydown="if(event.key==='Enter')summarizeURL(false)"
+        style="flex:1;min-width:220px" />
+      <input class="input-field" type="text" placeholder="Duration e.g. 4:06 (optional)"
+        value="${S.urlDuration || ''}"
+        oninput="S.urlDuration=this.value"
+        style="width:145px;font-size:12px"
+        title="Specify video duration (optional) so phase timestamps match exactly" />
       <button class="btn-primary" onclick="summarizeURL(false)" ${S.urlLoading||S.modelsLoading?'disabled':''}>
         ${S.urlLoading?`<span class="pulse-dot"></span>`:`<i class="ti ti-sparkles"></i>`} Summarize
       </button>
@@ -1665,6 +1871,11 @@ function renderSummaryCard(r, id = null, opts = {}) {
     <div class="summary-actions">
       ${copyBtn}
       ${rerunBtn}
+      ${r.platform === 'youtube' ? `
+        <button class="btn-ghost" style="padding:2px 8px;font-size:11px" onclick="adjustSummaryDuration('${cardId}')" title="Adjust phase timestamps to match actual video duration">
+          <i class="ti ti-clock-edit"></i> Adjust Duration
+        </button>
+      ` : ''}
       ${deleteBtn}
       ${r.url ? `<a href="${r.url}" target="_blank" rel="noopener" style="font-size:12px;color:var(--text-muted);margin-left:auto;display:inline-flex;align-items:center;gap:4px">Open original <i class="ti ti-external-link" style="font-size:12px"></i></a>` : ''}
     </div>
