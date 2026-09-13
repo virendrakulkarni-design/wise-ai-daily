@@ -2,7 +2,7 @@
  * AI Daily — Social Video Summarizer & AI News Digest
  * Uses Groq (free) with open-source models (Llama, Mixtral, Gemma).
  * Model list is fetched live from your API key — nothing hardcoded.
- * v1.3 — cache-bust 2026-09-13
+ * v1.4 — cache-bust 2026-09-13 (full history & URL summaries support)
  */
 
 // ── Constants ────────────────────────────────────────────────────
@@ -46,6 +46,9 @@ const S = {
   historyDates: [],
   historySelected: null,
   historyData: null,
+  historyFilter: 'all', // 'all' | 'digests' | 'summaries'
+  historySearch: '',
+  urlSummaries: [],
   loading: false,
   loadError: '',
   urlInput: '',
@@ -63,6 +66,33 @@ const S = {
 const sg = k => { try { const v=localStorage.getItem(k); return v?JSON.parse(v):null; } catch { return null; } };
 const ss = (k,v) => { try { localStorage.setItem(k,JSON.stringify(v)); } catch {} };
 const sl = p => { const r=[]; for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k?.startsWith(p))r.push(k);} return r; };
+
+function normalizeDigest(data) {
+  if (!data) return null;
+  if (Array.isArray(data)) return { fetchedAt: '', items: data };
+  const items = data.items || data.articles || data.news || data.stories || data.digest || data.trending || data.posts || [];
+  return {
+    ...data,
+    items: Array.isArray(items) ? items : []
+  };
+}
+
+function refreshHistoryDates() {
+  S.historyDates = sl('digest:')
+    .map(k => k.replace('digest:', ''))
+    .filter(Boolean)
+    .sort()
+    .reverse();
+}
+
+function formatDateLabel(dateStr) {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-').map(Number);
+  if (parts.length !== 3 || parts.some(isNaN)) return dateStr;
+  const dt = new Date(parts[0], parts[1] - 1, parts[2]);
+  const formatted = dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+  return dateStr === TODAY ? `${formatted} · Today` : formatted;
+}
 
 // ── Fetch model list live from Groq ──────────────────────────────
 async function loadModels(key) {
@@ -103,11 +133,40 @@ async function loadModels(key) {
 
 // ── Init ─────────────────────────────────────────────────────────
 async function init() {
-  S.apiKey      = sg('groq-api-key') || '';
-  S.following   = sg('ai-following') || [];
-  S.todayDigest = sg('digest:'+TODAY);
-  S.historyDates = sl('digest:').map(k=>k.replace('digest:','')).sort().reverse().filter(d=>d!==TODAY);
-  S.showSetup   = !S.apiKey;
+  S.apiKey       = sg('groq-api-key') || '';
+  S.following    = sg('ai-following') || [];
+  S.todayDigest  = normalizeDigest(sg('digest:'+TODAY));
+  S.urlSummaries = sg('ai-summaries') || [];
+
+  // Seed sample summary for the YouTube video if user has no summaries saved yet
+  if (!S.urlSummaries.length) {
+    S.urlSummaries = [
+      {
+        id: 'sum-seed-1',
+        title: 'RIP Paid Tools: Make LONG AI Videos With Consistency!',
+        platform: 'youtube',
+        type: 'Video',
+        url: 'https://www.youtube.com/watch?v=Qsi9MeLh95Q',
+        source: 'Mr Void',
+        duration: '11:51',
+        date: TODAY,
+        createdAt: new Date().toISOString(),
+        points: [
+          { timestamp: "0:00", seconds: 0, text: "The Problem: Why AI channels fail due to face mutations and Grok paywalls, and how this zero-cost automation pipeline fixes it." },
+          { timestamp: "1:05", seconds: 65, text: "Story & Visual Prompts: Google Gemini with structured master prompts generates complete cinematic story and 18+ chronological scene prompts." },
+          { timestamp: "2:50", seconds: 170, text: "Character Consistency: Generate 16:9 anchor character portraits in Google Flow to lock face geometry and prevent drift." },
+          { timestamp: "4:00", seconds: 240, text: "Automated Batch Generation: Auto Flow Chrome extension maps anchor characters to prompts and auto-downloads all rendered frames." },
+          { timestamp: "6:00", seconds: 360, text: "Full Animation Automation: Meta AI + Meta Automation extension for automated frame-to-video rendering with camera motion prompts." },
+          { timestamp: "9:10", seconds: 550, text: "Voiceover & Soundtrack: Google AI Studio (Gemini 2.5 Pro Single Speaker voice model) for studio audio, and Gemini for synced music." },
+          { timestamp: "10:50", seconds: 650, text: "Bonus High-Motion Safety Net: Google Vids (Veo 3.1 model) provides 10-12 free daily generations for complex physics action shots." }
+        ]
+      }
+    ];
+    ss('ai-summaries', S.urlSummaries);
+  }
+
+  refreshHistoryDates();
+  S.showSetup    = !S.apiKey;
 
   // Check for URL shared via iOS Shortcut or share.html redirect
   const pending = sessionStorage.getItem('pending-share');
@@ -126,6 +185,7 @@ async function init() {
     }
   }
 }
+
 
 // ── Save API key ─────────────────────────────────────────────────
 async function saveKey() {
@@ -240,7 +300,7 @@ async function fetchDigest() {
 - AI startup/funding news
 - Hacker News top AI threads${followStr}
 
-Each item needs realistic URLs and 3 bullet point key insights.
+You MUST return exactly 12 items in the "items" array, numbered item-1 to item-12. Do not stop early. Each item needs realistic URLs and 3 bullet point key insights.
 
 Return ONLY this JSON:
 {
@@ -261,10 +321,11 @@ Return ONLY this JSON:
 
   try {
     const result = await callGroq(prompt, 3000);
-    result.date = TODAY;
-    S.todayDigest = result;
-    ss('digest:'+TODAY, result);
-    S.historyDates = sl('digest:').map(k=>k.replace('digest:','')).sort().reverse().filter(d=>d!==TODAY);
+    const normalized = normalizeDigest(result);
+    normalized.date = TODAY;
+    S.todayDigest = normalized;
+    ss('digest:'+TODAY, normalized);
+    refreshHistoryDates();
   } catch(e) {
     if (e.message==='NO_KEY') S.showSetup=true;
     else S.loadError = e.message;
@@ -310,19 +371,35 @@ async function summarizeURL() {
   if (!parsed) { S.urlError="Doesn't look like a valid URL."; render(); return; }
   S.urlLoading=true; S.urlError=''; S.urlResult=null; render();
 
-  const isVideo = ['youtube','instagram','facebook'].includes(parsed.platform);
-  const prompt = isVideo
-    ? `You are summarizing a ${parsed.platform} ${parsed.type} shared via this URL: ${url}
+  // Fetch metadata via noembed for accurate title & author
+  let videoMeta = null;
+  if (parsed.platform === 'youtube' || parsed.platform === 'web') {
+    try {
+      const oembedRes = await fetch(`https://noembed.com/embed?url=${encodeURIComponent(url)}`);
+      if (oembedRes.ok) {
+        const odata = await oembedRes.json();
+        if (odata && odata.title) videoMeta = odata;
+      }
+    } catch {}
+  }
 
-This is a direct share link. Analyze the URL, infer what type of content it likely is, and generate a plausible realistic summary with key insights a viewer would take away.
+  const isVideo = ['youtube','instagram','facebook'].includes(parsed.platform);
+  const metaHint = videoMeta
+    ? `\nActual Title: "${videoMeta.title}"\nActual Creator/Author: "${videoMeta.author_name || ''}"`
+    : '';
+
+  const prompt = isVideo
+    ? `You are summarizing a ${parsed.platform} ${parsed.type} shared via this URL: ${url}.${metaHint}
+
+Summarize this video accurately based on its topic. Generate a realistic breakdown with key insights a viewer would take away.
 
 Return ONLY JSON:
 {
-  "title": "descriptive inferred title for the video",
+  "title": "${videoMeta?.title ? videoMeta.title.replace(/"/g, '\\"') : 'descriptive title for the video'}",
   "platform": "${parsed.platform}",
   "type": "${parsed.type}",
   "url": "${url}",
-  "source": "likely creator or page name",
+  "source": "${videoMeta?.author_name ? videoMeta.author_name.replace(/"/g, '\\"') : 'creator or channel name'}",
   "duration": "X:XX",
   "points": [
     {"timestamp":"0:00","seconds":0,"text":"opening context or hook"},
@@ -332,20 +409,40 @@ Return ONLY JSON:
     {"timestamp":"7:45","seconds":465,"text":"closing takeaway or call to action"}
   ]
 }`
-    : `Summarize the content at this ${parsed.platform} URL: ${url}
+    : `Summarize the content at this ${parsed.platform} URL: ${url}.${metaHint}
 
 Return ONLY JSON:
 {
-  "title": "page or post title",
+  "title": "${videoMeta?.title ? videoMeta.title.replace(/"/g, '\\"') : 'page or post title'}",
   "platform": "${parsed.platform}",
   "type": "${parsed.type}",
   "url": "${url}",
-  "source": "author or site name",
+  "source": "${videoMeta?.author_name ? videoMeta.author_name.replace(/"/g, '\\"') : 'author or site name'}",
   "points": ["insight 1","insight 2","insight 3","insight 4","insight 5"]
 }`;
 
   try {
-    S.urlResult = await callGroq(prompt);
+    const rawResult = await callGroq(prompt);
+    if (videoMeta?.title && (!rawResult.title || rawResult.title.includes('inferred') || rawResult.title === 'descriptive title for the video')) {
+      rawResult.title = videoMeta.title;
+    }
+    if (videoMeta?.author_name && (!rawResult.source || rawResult.source.includes('likely') || rawResult.source === 'creator or channel name')) {
+      rawResult.source = videoMeta.author_name;
+    }
+    rawResult.url = url;
+    rawResult.platform = parsed.platform;
+    rawResult.type = parsed.type;
+    S.urlResult = rawResult;
+
+    // Save to persistent URL summaries in localStorage
+    const summaryItem = {
+      id: 'sum-' + Date.now(),
+      createdAt: new Date().toISOString(),
+      date: TODAY,
+      ...rawResult,
+    };
+    S.urlSummaries = [summaryItem, ...(S.urlSummaries || []).filter(s => s.url !== url)].slice(0, 100);
+    ss('ai-summaries', S.urlSummaries);
   } catch(e) {
     if (e.message==='NO_KEY') S.showSetup=true;
     else S.urlError = e.message;
@@ -353,10 +450,16 @@ Return ONLY JSON:
   S.urlLoading=false; render();
 }
 
+function deleteSummary(id) {
+  S.urlSummaries = (S.urlSummaries || []).filter(s => s.id !== id);
+  ss('ai-summaries', S.urlSummaries);
+  render();
+}
+
 // ── History ──────────────────────────────────────────────────────
 function loadHistoryDate(date) {
-  S.historySelected=date;
-  S.historyData=sg('digest:'+date);
+  S.historySelected = date;
+  S.historyData = normalizeDigest(sg('digest:'+date));
   render();
 }
 
@@ -510,10 +613,11 @@ function buildAdd() {
     ${S.urlError?`<div class="error-box"><i class="ti ti-alert-circle"></i> ${S.urlError}</div>`:''}
     ${S.urlLoading?`<div class="loading-row"><span class="pulse-dot"></span> Analyzing…</div><div class="skeleton" style="height:160px"></div>`:''}
     ${r&&!S.urlLoading?`<div class="card">
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center">
         ${ptag(r.platform)}<span class="tag t-type">${r.type||''}</span>
         ${r.source?`<span style="font-size:11px;color:var(--text-muted)">${r.source}</span>`:''}
         ${r.duration?`<span style="font-size:11px;color:var(--text-muted)">${r.duration}</span>`:''}
+        <span style="font-size:11px;color:var(--text-success);margin-left:auto"><i class="ti ti-check"></i> Saved to History</span>
       </div>
       <div style="font-size:15px;font-weight:500;margin-bottom:12px;line-height:1.4">${r.title||'Summary'}</div>
       ${isVideo&&r.points?r.points.map(p=>{
@@ -527,31 +631,213 @@ function buildAdd() {
     </div>`:''}`;
 }
 
+// ── Summary Card Renderer ─────────────────────────────────────────
+function renderSummaryCard(r, id = null) {
+  if (!r) return '';
+  const isVideo = ['youtube','instagram','facebook'].includes(r.platform);
+  const deleteBtn = id ? `
+    <button class="btn-ghost" style="padding:2px 7px;font-size:11px;margin-left:auto;color:var(--text-danger)" onclick="deleteSummary('${id}')" title="Delete summary">
+      <i class="ti ti-trash"></i>
+    </button>` : '';
+
+  return `<div class="card" style="margin-bottom:12px">
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+      ${ptag(r.platform)}
+      <span class="tag t-type">${r.type || 'Summary'}</span>
+      ${r.source ? `<span style="font-size:11px;color:var(--text-muted)">${r.source}</span>` : ''}
+      ${r.duration ? `<span style="font-size:11px;color:var(--text-muted)">${r.duration}</span>` : ''}
+      ${r.date ? `<span style="font-size:11px;color:var(--text-muted)">${formatDateLabel(r.date)}</span>` : ''}
+      ${deleteBtn}
+    </div>
+    <a href="${r.url || '#'}" target="_blank" rel="noopener" class="card-title">
+      ${r.title || 'Summary'} <i class="ti ti-external-link" style="font-size:12px;color:var(--text-muted)"></i>
+    </a>
+    ${isVideo && Array.isArray(r.points) && typeof r.points[0] === 'object' ? r.points.map(p => {
+      const href = r.platform === 'youtube' && p.seconds !== undefined ? `${r.url}&t=${p.seconds}s` : r.url;
+      return `<div class="bullet"><a class="ts-link${r.platform !== 'youtube' ? ' ts-approx' : ''}" href="${href}" target="_blank" rel="noopener">${p.timestamp || '0:00'}</a><span class="bullet-text">${p.text || ''}</span></div>`;
+    }).join('') : ''}
+    ${(!isVideo || !Array.isArray(r.points) || typeof r.points[0] !== 'object') && Array.isArray(r.points) ? r.points.map(p => {
+      const text = typeof p === 'string' ? p : (p.text || '');
+      return `<div class="bullet"><div class="bullet-dot"></div><span class="bullet-text">${text}</span></div>`;
+    }).join('') : ''}
+    ${r.url ? `<a href="${r.url}" target="_blank" rel="noopener" style="font-size:12px;color:var(--text-muted);margin-top:10px;display:inline-flex;align-items:center;gap:4px">Open original <i class="ti ti-external-link" style="font-size:12px"></i></a>` : ''}
+  </div>`;
+}
+
 // ── Tab: History ─────────────────────────────────────────────────
 function buildHistory() {
   if (S.historySelected) {
-    const hd=S.historyData;
-    const dt=new Date(S.historySelected+'T00:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+    const hd = S.historyData;
+    const dt = formatDateLabel(S.historySelected);
     return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem">
       <button class="btn-ghost" onclick="S.historySelected=null;S.historyData=null;render()"><i class="ti ti-arrow-left"></i> Back</button>
       <div style="font-size:15px;font-weight:500">${dt}</div>
     </div>
-    ${hd?`<div style="font-size:12px;color:var(--text-muted);margin-bottom:14px">${(hd.items||[]).length} items · ${hd.fetchedAt||''}</div>${renderItems(hd.items)}`
-       :`<div class="error-box"><i class="ti ti-alert-circle"></i> Digest not found.</div>`}`;
+    ${hd ? `<div style="font-size:12px;color:var(--text-muted);margin-bottom:14px">${(hd.items||[]).length} items · ${hd.fetchedAt||''}</div>${renderItems(hd.items)}`
+         : `<div class="error-box"><i class="ti ti-alert-circle"></i> Digest not found.</div>`}`;
   }
-  if (!S.historyDates.length) return `<div class="empty-state">
-    <i class="ti ti-calendar-off"></i>
-    <h3>No history yet</h3>
-    <p>Past daily digests will appear here after you run your first research.</p>
-  </div>`;
-  return `<div style="font-size:13px;color:var(--text-secondary);margin-bottom:14px">${S.historyDates.length} past digest${S.historyDates.length!==1?'s':''}</div>
-  ${S.historyDates.map(date=>{
-    const dt=new Date(date+'T00:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
-    return `<div class="history-row" onclick="loadHistoryDate('${date}')">
-      <div><div style="font-size:14px;font-weight:500">${dt}</div><div style="font-size:12px;color:var(--text-muted);margin-top:2px">AI Daily Digest</div></div>
-      <i class="ti ti-chevron-right" style="color:var(--text-muted)"></i>
+
+  // Collect all items across all digests
+  const allDigestItems = [];
+  S.historyDates.forEach(date => {
+    const digest = normalizeDigest(sg('digest:' + date));
+    if (digest?.items?.length) {
+      digest.items.forEach(item => {
+        allDigestItems.push({
+          ...item,
+          digestDate: date,
+          isDigest: true,
+        });
+      });
+    }
+  });
+
+  const urlSummaries = S.urlSummaries || [];
+  const totalAllCount = allDigestItems.length + urlSummaries.length;
+
+  // Search filter
+  const q = (S.historySearch || '').trim().toLowerCase();
+  const filterSummary = (s) => {
+    if (!q) return true;
+    const titleMatch = (s.title || '').toLowerCase().includes(q);
+    const sourceMatch = (s.source || '').toLowerCase().includes(q);
+    const pointsMatch = (s.points || []).some(p => {
+      const txt = typeof p === 'string' ? p : (p.text || '');
+      return txt.toLowerCase().includes(q);
+    });
+    return titleMatch || sourceMatch || pointsMatch;
+  };
+
+  const filterDigestItem = (it) => {
+    if (!q) return true;
+    const titleMatch = (it.title || '').toLowerCase().includes(q);
+    const sourceMatch = (it.source || '').toLowerCase().includes(q);
+    const pointsMatch = (it.points || []).some(p => {
+      const txt = typeof p === 'string' ? p : (p.text || '');
+      return txt.toLowerCase().includes(q);
+    });
+    return titleMatch || sourceMatch || pointsMatch;
+  };
+
+  const filteredSummaries = urlSummaries.filter(filterSummary);
+  const filteredDigestItems = allDigestItems.filter(filterDigestItem);
+
+  const pills = `
+    <div class="filter-pills">
+      <button class="pill-btn ${S.historyFilter==='all'?'active':''}" onclick="S.historyFilter='all';render()">
+        <i class="ti ti-list"></i> All Items (${totalAllCount})
+      </button>
+      <button class="pill-btn ${S.historyFilter==='digests'?'active':''}" onclick="S.historyFilter='digests';render()">
+        <i class="ti ti-calendar"></i> Daily Digests (${S.historyDates.length})
+      </button>
+      <button class="pill-btn ${S.historyFilter==='summaries'?'active':''}" onclick="S.historyFilter='summaries';render()">
+        <i class="ti ti-link"></i> URL Summaries (${urlSummaries.length})
+      </button>
+    </div>
+    <div style="margin-bottom:14px">
+      <input class="input-field" type="search" placeholder="Search all history items, topics, keywords..."
+        value="${S.historySearch}"
+        oninput="S.historySearch=this.value;render()" />
+    </div>
+  `;
+
+  if (!totalAllCount && !S.historyDates.length) {
+    return `<div class="empty-state">
+      <i class="ti ti-calendar-off"></i>
+      <h3>No history yet</h3>
+      <p>Items will automatically appear here whenever you run a daily digest or summarize a URL.</p>
     </div>`;
-  }).join('')}`;
+  }
+
+  if (S.historyFilter === 'summaries') {
+    if (!filteredSummaries.length) {
+      return pills + `<div class="empty-state">
+        <i class="ti ti-link-off"></i>
+        <h3>No URL summaries found</h3>
+        <p>${q ? 'No summaries matched your search.' : 'Summarize any YouTube video, article, or post in the "Add URL" tab to save it here.'}</p>
+      </div>`;
+    }
+    return pills + `
+      <div style="font-size:13px;color:var(--text-secondary);margin-bottom:12px">${filteredSummaries.length} saved summar${filteredSummaries.length !== 1 ? 'ies' : 'y'}</div>
+      ${filteredSummaries.map(s => renderSummaryCard(s, s.id)).join('')}
+    `;
+  }
+
+  if (S.historyFilter === 'digests') {
+    if (!S.historyDates.length) {
+      return pills + `<div class="empty-state"><i class="ti ti-calendar-off"></i><h3>No digests yet</h3></div>`;
+    }
+    return pills + `
+      <div style="font-size:13px;color:var(--text-secondary);margin-bottom:12px">${S.historyDates.length} digest${S.historyDates.length !== 1 ? 's' : ''} stored</div>
+      ${S.historyDates.map(date => {
+        const dData = normalizeDigest(sg('digest:' + date));
+        const count = (dData?.items || []).length;
+        const dt = formatDateLabel(date);
+        const isToday = date === TODAY;
+        return `<div class="history-row" onclick="loadHistoryDate('${date}')">
+          <div>
+            <div style="font-size:14px;font-weight:500;display:flex;align-items:center;gap:6px">
+              ${dt}
+              ${isToday ? '<span class="model-badge">Current</span>' : ''}
+            </div>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:3px">${count} news items · ${dData?.fetchedAt || 'Saved'}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <span style="font-size:12px;color:var(--brand);font-weight:500">View items</span>
+            <i class="ti ti-chevron-right" style="color:var(--text-muted)"></i>
+          </div>
+        </div>`;
+      }).join('')}
+    `;
+  }
+
+  // S.historyFilter === 'all'
+  const hasMatches = filteredSummaries.length > 0 || filteredDigestItems.length > 0;
+  if (!hasMatches) {
+    return pills + `<div class="empty-state">
+      <i class="ti ti-search"></i>
+      <h3>No items matched "${S.historySearch}"</h3>
+      <p>Try searching for a different keyword or clear the search box.</p>
+    </div>`;
+  }
+
+  let html = pills;
+  if (filteredSummaries.length) {
+    html += `
+      <div class="section-label" style="display:flex;align-items:center;gap:6px;margin-top:6px">
+        <i class="ti ti-sparkles" style="color:var(--brand)"></i> Summarized Videos & Links (${filteredSummaries.length})
+      </div>
+      ${filteredSummaries.map(s => renderSummaryCard(s, s.id)).join('')}
+    `;
+  }
+
+  if (filteredDigestItems.length) {
+    html += `
+      <div class="section-label" style="display:flex;align-items:center;gap:6px;margin-top:16px">
+        <i class="ti ti-newspaper" style="color:var(--brand)"></i> Daily Digest News Items (${filteredDigestItems.length})
+      </div>
+      ${filteredDigestItems.map(item => `
+        <div class="card">
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+            <span class="tag t-type" style="font-size:10px">${formatDateLabel(item.digestDate)}</span>
+            ${item.importance === 'high' ? '<span class="tag t-hot"><i class="ti ti-flame"></i> Hot</span>' : ''}
+            ${ptag(item.platform)}
+            <span class="tag t-type">${item.type || 'post'}</span>
+            ${item.source ? `<span style="font-size:11px;color:var(--text-muted);margin-left:auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px">${item.source}</span>` : ''}
+          </div>
+          <a href="${item.url || '#'}" target="_blank" rel="noopener" class="card-title">
+            ${item.title} <i class="ti ti-external-link" style="font-size:12px;color:var(--text-muted)"></i>
+          </a>
+          ${(item.points || []).map(p => {
+            const txt = typeof p === 'string' ? p : (p.text || '');
+            return `<div class="bullet"><div class="bullet-dot"></div><span class="bullet-text">${txt}</span></div>`;
+          }).join('')}
+        </div>
+      `).join('')}
+    `;
+  }
+
+  return html;
 }
 
 // ── Tab: Following ───────────────────────────────────────────────
