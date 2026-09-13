@@ -71,13 +71,79 @@ const sg = k => { try { const v=localStorage.getItem(k); return v?JSON.parse(v):
 const ss = (k,v) => { try { localStorage.setItem(k,JSON.stringify(v)); } catch {} };
 const sl = p => { const r=[]; for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k?.startsWith(p))r.push(k);} return r; };
 
+function resolveItemLink(item) {
+  if (!item) return '#';
+  let url = (item.url || '').trim();
+  const title = (item.title || '').trim();
+  const platform = (item.platform || '').toLowerCase();
+
+  // 1. If it's already a working search URL or verified live API URL
+  if (url.includes('google.com/search') || url.includes('news.google.com/search') ||
+      url.includes('huggingface.co/papers/') || url.includes('news.ycombinator.com/item')) {
+    return url;
+  }
+
+  // 2. Detect hallucinated deep paths (corporate blogs, invented slugs)
+  const hallucinationPatterns = [
+    /anthropic\.com\/news\/.+/i,
+    /openai\.com\/(index|blog)\/.+/i,
+    /blog\.google\/.+/i,
+    /techcrunch\.com\/.+/i,
+    /theverge\.com\/.+/i,
+    /wired\.com\/.+/i,
+    /venturebeat\.com\/.+/i,
+    /x\.com\/.+\/status\/\d+/i,
+    /twitter\.com\/.+\/status\/\d+/i,
+    /arxiv\.org\/abs\/\d+/i
+  ];
+
+  const isLikelyHallucinated = !url || url === '#' || hallucinationPatterns.some(rx => rx.test(url));
+
+  if (isLikelyHallucinated) {
+    const q = encodeURIComponent(title || item.source || 'AI news');
+    if (platform === 'github') return `https://github.com/search?q=${q}&type=repositories`;
+    if (platform === 'paper') return `https://arxiv.org/search/?query=${q}&searchtype=all`;
+    if (platform === 'youtube') return `https://www.youtube.com/results?search_query=${q}`;
+    if (platform === 'twitter' || platform === 'x') return `https://x.com/search?q=${q}`;
+    return `https://news.google.com/search?q=${q}`;
+  }
+
+  return url;
+}
+
+function getOfficialHub(url = '', source = '', title = '') {
+  const combined = `${url} ${source} ${title}`.toLowerCase();
+  if (combined.includes('anthropic') || combined.includes('claude')) return { label: 'Anthropic News', url: 'https://www.anthropic.com/news' };
+  if (combined.includes('openai') || combined.includes('chatgpt') || combined.includes('gpt')) return { label: 'OpenAI News', url: 'https://openai.com/news' };
+  if (combined.includes('google') || combined.includes('gemini') || combined.includes('deepmind')) return { label: 'Google AI Blog', url: 'https://blog.google/technology/ai/' };
+  if (combined.includes('meta') || combined.includes('llama')) return { label: 'Meta AI Blog', url: 'https://ai.meta.com/blog/' };
+  if (combined.includes('mistral')) return { label: 'Mistral News', url: 'https://mistral.ai/news/' };
+  if (combined.includes('huggingface') || combined.includes('hugging face')) return { label: 'Hugging Face Blog', url: 'https://huggingface.co/blog' };
+  if (combined.includes('github')) return { label: 'GitHub Trending', url: 'https://github.com/trending' };
+  if (combined.includes('arxiv')) return { label: 'arXiv AI Recent', url: 'https://arxiv.org/list/cs.AI/recent' };
+  if (combined.includes('ycombinator') || combined.includes('hacker news')) return { label: 'Hacker News', url: 'https://news.ycombinator.com/' };
+  return null;
+}
+
 function normalizeDigest(data) {
   if (!data) return null;
-  if (Array.isArray(data)) return { fetchedAt: '', items: data };
-  const items = data.items || data.articles || data.news || data.stories || data.digest || data.trending || data.posts || [];
+  const rawItems = Array.isArray(data) 
+    ? data 
+    : (data.items || data.articles || data.news || data.stories || data.digest || data.trending || data.posts || []);
+  
+  const items = (Array.isArray(rawItems) ? rawItems : []).map(item => {
+    const safeUrl = resolveItemLink(item);
+    return {
+      ...item,
+      url: safeUrl,
+      originalUrl: item.originalUrl || item.url || safeUrl
+    };
+  });
+
   return {
-    ...data,
-    items: Array.isArray(items) ? items : []
+    ...(typeof data === 'object' && !Array.isArray(data) ? data : {}),
+    fetchedAt: data.fetchedAt || '',
+    items
   };
 }
 
@@ -965,11 +1031,47 @@ async function fetchDigest() {
   if (!S.apiKey) { S.showSetup=true; render(); return; }
   S.loading=true; S.loadError=''; render();
 
+  // Pre-fetch real trending stories from free public CORS-enabled feeds
+  let realFeedsContext = '';
+  try {
+    const [hnRes, hfRes] = await Promise.allSettled([
+      fetch('https://hn.algolia.com/api/v1/search?query=AI+OR+LLM+OR+GPT&tags=story&hitsPerPage=6'),
+      fetch('https://huggingface.co/api/daily_papers')
+    ]);
+
+    const realItems = [];
+    if (hnRes.status === 'fulfilled' && hnRes.value.ok) {
+      const hnData = await hnRes.value.json();
+      (hnData.hits || []).slice(0, 4).forEach(h => {
+        const u = h.url || `https://news.ycombinator.com/item?id=${h.objectID}`;
+        if (h.title && u) {
+          realItems.push(`- Title: "${h.title}" | Platform: "web" | Source: "Hacker News" | Real URL: ${u}`);
+        }
+      });
+    }
+
+    if (hfRes.status === 'fulfilled' && hfRes.value.ok) {
+      const hfData = await hfRes.value.json();
+      (hfData || []).slice(0, 4).forEach(p => {
+        if (p.title && p.paper?.id) {
+          realItems.push(`- Title: "${p.title}" | Platform: "paper" | Source: "Hugging Face Daily Papers" | Real URL: https://huggingface.co/papers/${p.paper.id}`);
+        }
+      });
+    }
+
+    if (realItems.length > 0) {
+      realFeedsContext = `\nREAL VERIFIED STORIES FROM TODAY (Include these with their exact Real URLs):\n${realItems.join('\n')}\n`;
+    }
+  } catch (e) {
+    console.warn('Could not pre-fetch live feeds:', e);
+  }
+
   const followStr = S.following.length
     ? '\nAlso include latest content from: ' + S.following.map(f=>`${f.platform} @${f.handle}`).join(', ') + '.'
     : '';
 
-  const prompt = `Today is ${TODAY}. Generate a daily AI news digest of 12 varied trending AI/ML items from the last 24 hours. Mix of:
+  const prompt = `Today is ${TODAY}. Generate a daily AI news digest of 12 varied trending AI/ML items from the last 24 hours.
+Mix of:
 - Breaking AI model or product announcements (OpenAI, Anthropic, Google, Meta, Mistral, xAI)
 - Trending GitHub repos for AI/ML
 - New research papers (arXiv, Hugging Face)
@@ -977,8 +1079,16 @@ async function fetchDigest() {
 - YouTube AI videos trending
 - AI startup/funding news
 - Hacker News top AI threads${followStr}
+${realFeedsContext}
+URL GENERATION RULES (CRITICAL):
+1. For items from the REAL VERIFIED STORIES list above, PRESERVE their exact Real URL.
+2. For model/product announcements or news articles without a verified exact URL, ALWAYS use a Google News search URL: "https://news.google.com/search?q=KEYWORDS" (e.g. "https://news.google.com/search?q=Anthropic+Claude+4.5" or "https://news.google.com/search?q=OpenAI+GPT-5").
+3. For GitHub repos: Use "https://github.com/search?q=KEYWORDS&type=repositories" or the exact real repo URL.
+4. For research papers without an exact link: Use "https://arxiv.org/search/?query=KEYWORDS&searchtype=all".
+5. For YouTube videos: Use "https://www.youtube.com/results?search_query=KEYWORDS".
+6. STRICTLY FORBIDDEN: NEVER invent non-existent deep slugs like "https://www.anthropic.com/news/claude-4-5" or fake blog paths that cause 404 errors. Every URL MUST open successfully.
 
-You MUST return exactly 12 items in the "items" array, numbered item-1 to item-12. Do not stop early. Each item needs realistic URLs and 3 bullet point key insights.
+You MUST return exactly 12 items in the "items" array, numbered item-1 to item-12. Do not stop early. Each item needs 3 bullet point key insights.
 
 Return ONLY this JSON:
 {
@@ -1213,18 +1323,51 @@ function ptag(p) { const x=PLATFORMS[p]||PLATFORMS.web; return `<span class="tag
 
 function renderItems(items) {
   if (!items?.length) return '<p style="color:var(--text-muted);font-size:14px">No items.</p>';
-  return items.map(item => `<div class="card">
-    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
-      ${item.importance==='high'?'<span class="tag t-hot"><i class="ti ti-flame"></i> Hot</span>':''}
-      ${ptag(item.platform)}
-      <span class="tag t-type">${item.type||'post'}</span>
-      ${item.source?`<span style="font-size:11px;color:var(--text-muted);margin-left:auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px">${item.source}</span>`:''}
-    </div>
-    <a href="${item.url||'#'}" target="_blank" rel="noopener" class="card-title">
-      ${item.title} <i class="ti ti-external-link" style="font-size:12px;color:var(--text-muted)"></i>
-    </a>
-    ${(item.points||[]).map(p=>`<div class="bullet"><div class="bullet-dot"></div><span class="bullet-text">${p}</span></div>`).join('')}
-  </div>`).join('');
+  return items.map(item => {
+    const resolvedUrl = resolveItemLink(item);
+    const hub = getOfficialHub(item.url || resolvedUrl, item.source, item.title);
+    const safeTitle = (item.title || 'AI Story').replace(/'/g, "\\'");
+    const safeUrl = resolvedUrl.replace(/'/g, "\\'");
+
+    return `<div class="card" style="margin-bottom:12px">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+        ${item.importance==='high'?'<span class="tag t-hot"><i class="ti ti-flame"></i> Hot</span>':''}
+        ${ptag(item.platform)}
+        <span class="tag t-type">${item.type||'post'}</span>
+        ${item.source?`<span style="font-size:11px;color:var(--text-muted);margin-left:auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px">${item.source}</span>`:''}
+      </div>
+
+      <a href="${resolvedUrl}" target="_blank" rel="noopener" class="card-title" title="Open verified news and coverage">
+        ${item.title} <i class="ti ti-external-link" style="font-size:12px;color:var(--text-muted)"></i>
+      </a>
+
+      ${(item.points||[]).map(p=>`<div class="bullet"><div class="bullet-dot"></div><span class="bullet-text">${p}</span></div>`).join('')}
+
+      <div style="display:flex;gap:8px;align-items:center;margin-top:10px;padding-top:8px;border-top:1px solid var(--border-color);flex-wrap:wrap">
+        <a href="${resolvedUrl}" target="_blank" rel="noopener" class="btn-ghost" style="font-size:11px;padding:3px 9px;text-decoration:none;display:inline-flex;align-items:center;gap:4px" title="Read coverage on Google News / Source">
+          <i class="ti ti-news"></i> Read Story
+        </a>
+        ${hub ? `
+          <a href="${hub.url}" target="_blank" rel="noopener" class="btn-ghost" style="font-size:11px;padding:3px 9px;text-decoration:none;display:inline-flex;align-items:center;gap:4px" title="Visit official page / newsroom">
+            <i class="ti ti-building"></i> ${hub.label}
+          </a>
+        ` : ''}
+        <button onclick="summarizeResearchedStory('${safeTitle}', '${safeUrl}')" class="btn-ghost" style="font-size:11px;padding:3px 9px;display:inline-flex;align-items:center;gap:4px" title="Summarize in AI Daily">
+          <i class="ti ti-sparkles"></i> Summarize
+        </button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function summarizeResearchedStory(title, url) {
+  S.tab = 'add';
+  S.urlInput = url;
+  S.urlError = '';
+  render();
+  if (S.apiKey) {
+    summarizeURL(false);
+  }
 }
 
 // ── Setup modal ──────────────────────────────────────────────────
@@ -1687,8 +1830,13 @@ function buildHistory() {
       <div class="section-label" style="display:flex;align-items:center;gap:6px;margin-top:16px">
         <i class="ti ti-newspaper" style="color:var(--brand)"></i> Daily Digest News Items (${filteredDigestItems.length})
       </div>
-      ${filteredDigestItems.map(item => `
-        <div class="card">
+      ${filteredDigestItems.map(item => {
+        const resolvedUrl = resolveItemLink(item);
+        const hub = getOfficialHub(item.url || resolvedUrl, item.source, item.title);
+        const safeTitle = (item.title || 'AI Story').replace(/'/g, "\\'");
+        const safeUrl = resolvedUrl.replace(/'/g, "\\'");
+
+        return `<div class="card" style="margin-bottom:12px">
           <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
             <span class="tag t-type" style="font-size:10px">${formatDateLabel(item.digestDate)}</span>
             ${item.importance === 'high' ? '<span class="tag t-hot"><i class="ti ti-flame"></i> Hot</span>' : ''}
@@ -1696,15 +1844,28 @@ function buildHistory() {
             <span class="tag t-type">${item.type || 'post'}</span>
             ${item.source ? `<span style="font-size:11px;color:var(--text-muted);margin-left:auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px">${item.source}</span>` : ''}
           </div>
-          <a href="${item.url || '#'}" target="_blank" rel="noopener" class="card-title">
+          <a href="${resolvedUrl}" target="_blank" rel="noopener" class="card-title">
             ${item.title} <i class="ti ti-external-link" style="font-size:12px;color:var(--text-muted)"></i>
           </a>
           ${(item.points || []).map(p => {
             const txt = typeof p === 'string' ? p : (p.text || '');
             return `<div class="bullet"><div class="bullet-dot"></div><span class="bullet-text">${txt}</span></div>`;
           }).join('')}
-        </div>
-      `).join('')}
+          <div style="display:flex;gap:8px;align-items:center;margin-top:10px;padding-top:8px;border-top:1px solid var(--border-color);flex-wrap:wrap">
+            <a href="${resolvedUrl}" target="_blank" rel="noopener" class="btn-ghost" style="font-size:11px;padding:3px 9px;text-decoration:none;display:inline-flex;align-items:center;gap:4px">
+              <i class="ti ti-news"></i> Read Story
+            </a>
+            ${hub ? `
+              <a href="${hub.url}" target="_blank" rel="noopener" class="btn-ghost" style="font-size:11px;padding:3px 9px;text-decoration:none;display:inline-flex;align-items:center;gap:4px">
+                <i class="ti ti-building"></i> ${hub.label}
+              </a>
+            ` : ''}
+            <button onclick="summarizeResearchedStory('${safeTitle}', '${safeUrl}')" class="btn-ghost" style="font-size:11px;padding:3px 9px;display:inline-flex;align-items:center;gap:4px">
+              <i class="ti ti-sparkles"></i> Summarize
+            </button>
+          </div>
+        </div>`;
+      }).join('')}
     `;
   }
 

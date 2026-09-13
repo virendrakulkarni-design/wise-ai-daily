@@ -3,7 +3,7 @@
  * Enables PWA install + handles incoming Share Target requests
  * Network-first strategy for code assets to prevent stale cache lockups
  */
-const CACHE = 'ai-daily-v8';
+const CACHE = 'ai-daily-v9';
 const ASSETS = [
   '/wise-ai-daily/',
   '/wise-ai-daily/index.html',
