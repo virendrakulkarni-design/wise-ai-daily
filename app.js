@@ -138,35 +138,78 @@ async function init() {
   S.todayDigest  = normalizeDigest(sg('digest:'+TODAY));
   S.urlSummaries = sg('ai-summaries') || [];
 
-  // Seed sample summary for the YouTube video if user has no summaries saved yet
-  if (!S.urlSummaries.length) {
-    S.urlSummaries = [
+  const seedVipassana = {
+    id: 'sum-seed-vipassana',
+    title: 'Guided Vipassana Meditation — 1 Hour S.N. Goenka Session',
+    platform: 'youtube',
+    type: 'Video',
+    url: 'https://www.youtube.com/watch?v=vwLVjHEGGK0',
+    source: 'S.N. Goenka / Virendra Kulkarni',
+    duration: '1:02:48',
+    date: TODAY,
+    createdAt: new Date().toISOString(),
+    overview: 'A complete 1-hour guided Vipassana meditation session led by S.N. Goenka Guruji for experienced students. Emphasizes developing Equanimity (Samata) and experiential wisdom (Panna) through observing bodily sensations without craving or aversion.',
+    points: [
       {
-        id: 'sum-seed-1',
-        title: 'RIP Paid Tools: Make LONG AI Videos With Consistency!',
-        platform: 'youtube',
-        type: 'Video',
-        url: 'https://www.youtube.com/watch?v=Qsi9MeLh95Q',
-        source: 'Mr Void',
-        duration: '11:51',
-        date: TODAY,
-        createdAt: new Date().toISOString(),
-        points: [
-          { timestamp: "0:00", seconds: 0, text: "The Problem: Why AI channels fail due to face mutations and Grok paywalls, and how this zero-cost automation pipeline fixes it." },
-          { timestamp: "1:05", seconds: 65, text: "Story & Visual Prompts: Google Gemini with structured master prompts generates complete cinematic story and 18+ chronological scene prompts." },
-          { timestamp: "2:50", seconds: 170, text: "Character Consistency: Generate 16:9 anchor character portraits in Google Flow to lock face geometry and prevent drift." },
-          { timestamp: "4:00", seconds: 240, text: "Automated Batch Generation: Auto Flow Chrome extension maps anchor characters to prompts and auto-downloads all rendered frames." },
-          { timestamp: "6:00", seconds: 360, text: "Full Animation Automation: Meta AI + Meta Automation extension for automated frame-to-video rendering with camera motion prompts." },
-          { timestamp: "9:10", seconds: 550, text: "Voiceover & Soundtrack: Google AI Studio (Gemini 2.5 Pro Single Speaker voice model) for studio audio, and Gemini for synced music." },
-          { timestamp: "10:50", seconds: 650, text: "Bonus High-Motion Safety Net: Google Vids (Veo 3.1 model) provides 10-12 free daily generations for complex physics action shots." }
-        ]
+        timestamp: "2:36",
+        seconds: 156,
+        text: "Anapana (Breath Awareness): Focus attention on the natural, incoming and outgoing breath at the entrance of the nostrils to calm the mind, sharpen concentration, and develop Samadhi."
+      },
+      {
+        timestamp: "11:29",
+        seconds: 689,
+        text: "Vipassana Technique (Head-to-Toe Body Scan): Systematically scan bodily sensations from the top of the head to the tips of the toes. Observe sensations objectively—whether gross, subtle, heavy, or tingling."
+      },
+      {
+        timestamp: "16:10",
+        seconds: 970,
+        text: "Cultivating Equanimity (Samata & Anicca): Maintain absolute mental balance without reacting to sensations. Avoid craving (Raga) pleasant sensations or aversion (Dosa) toward pain, understanding that all sensations arise and pass away (Anicca)."
+      },
+      {
+        timestamp: "38:33",
+        seconds: 2313,
+        text: "Deep Sankhara Eradication: Sittings of strong determination (Adhitthana). Transforming intense bodily discomfort into opportunities to break deep-seated patterns of aversion and unconscious reactivity."
+      },
+      {
+        timestamp: "54:06",
+        seconds: 3246,
+        text: "Mangal Maitri (Metta Meditation): Concluding practice of radiating loving-kindness and compassion to all living beings, wishing universal peace, harmony, and liberation (Bhavatu Sabba Mangalam)."
       }
-    ];
-    ss('ai-summaries', S.urlSummaries);
-  }
+    ]
+  };
+
+  const seedAiVideo = {
+    id: 'sum-seed-aivideo',
+    title: 'RIP Paid Tools: Make LONG AI Videos With Consistency!',
+    platform: 'youtube',
+    type: 'Video',
+    url: 'https://www.youtube.com/watch?v=Qsi9MeLh95Q',
+    source: 'Mr Void',
+    duration: '11:51',
+    date: TODAY,
+    createdAt: new Date().toISOString(),
+    overview: 'A zero-cost, fully automated production pipeline for long-form cinematic AI narrative videos with consistent character design using free tools and browser extensions.',
+    points: [
+      { timestamp: "0:00", seconds: 0, text: "The Problem: Why AI channels fail due to face mutations and Grok paywalls, and how this zero-cost automation pipeline fixes it." },
+      { timestamp: "1:05", seconds: 65, text: "Story & Visual Prompts: Google Gemini with structured master prompts generates complete cinematic story and 18+ chronological scene prompts." },
+      { timestamp: "2:50", seconds: 170, text: "Character Consistency: Generate 16:9 anchor character portraits in Google Flow to lock face geometry and prevent drift." },
+      { timestamp: "4:00", seconds: 240, text: "Automated Batch Generation: Auto Flow Chrome extension maps anchor characters to prompts and auto-downloads all rendered frames." },
+      { timestamp: "6:00", seconds: 360, text: "Full Animation Automation: Meta AI + Meta Automation extension for automated frame-to-video rendering with camera motion prompts." },
+      { timestamp: "9:10", seconds: 550, text: "Voiceover & Soundtrack: Google AI Studio (Gemini 2.5 Pro Single Speaker voice model) for studio audio, and Gemini for synced music." },
+      { timestamp: "10:50", seconds: 650, text: "Bonus High-Motion Safety Net: Google Vids (Veo 3.1 model) provides 10-12 free daily generations for complex physics action shots." }
+    ]
+  };
+
+  // Seed sample summaries if not present
+  const hasVipassana = S.urlSummaries.some(s => (s.url||'').includes('vwLVjHEGGK0'));
+  const hasAiVideo = S.urlSummaries.some(s => (s.url||'').includes('Qsi9MeLh95Q'));
+  if (!hasVipassana) S.urlSummaries.unshift(seedVipassana);
+  if (!hasAiVideo) S.urlSummaries.push(seedAiVideo);
+  ss('ai-summaries', S.urlSummaries);
 
   refreshHistoryDates();
   S.showSetup    = !S.apiKey;
+
 
   // Check for URL shared via iOS Shortcut or share.html redirect
   const pending = sessionStorage.getItem('pending-share');
@@ -384,54 +427,84 @@ async function summarizeURL() {
   }
 
   const isVideo = ['youtube','instagram','facebook'].includes(parsed.platform);
-  const metaHint = videoMeta
-    ? `\nActual Title: "${videoMeta.title}"\nActual Creator/Author: "${videoMeta.author_name || ''}"`
-    : '';
+  const rawTitle = videoMeta?.title || '';
+  const cleanTitle = rawTitle.replace(/\s*-\s*YouTube$/i, '').trim();
+  const videoAuthor = videoMeta?.author_name || '';
 
   const prompt = isVideo
-    ? `You are summarizing a ${parsed.platform} ${parsed.type} shared via this URL: ${url}.${metaHint}
+    ? `You are an expert video analyst summarizing this ${parsed.platform} video:
+URL: ${url}
+Title: "${cleanTitle || 'Video'}"
+${videoAuthor ? `Creator / Channel: "${videoAuthor}"` : ''}
 
-Summarize this video accurately based on its topic. Generate a realistic breakdown with key insights a viewer would take away.
+TASK:
+Analyze this video in detail based on its subject matter ("${cleanTitle}").
+- If this is a meditation session (e.g., Vipassana, Mindfulness, Pranayama, Yoga), detail the exact classical phases (e.g., Anapana breath awareness, systematic body scanning, developing Equanimity towards sensations and knowing Anicca/impermanence, and concluding Mangal Maitri / Metta meditation) with realistic timestamps.
+- If this is a tutorial, AI workflow, lecture, or workout, break down the exact step-by-step methodologies, tools, and takeaways.
 
-Return ONLY JSON:
+STRICT INSTRUCTIONS:
+1. Provide 4 to 6 chronological milestones across the video with realistic timestamps (e.g., 0:00, 2:30, 11:15, 38:00, 54:00).
+2. For EVERY milestone, write a rich, substantive explanation (2-3 detailed sentences) explaining what is taught, practiced, or demonstrated.
+3. FORBIDDEN: NEVER output placeholder text like "opening context", "first main point", "second main point", "third main point", "hook", or "takeaway". Every point must contain real, specific, rich knowledge.
+4. Include a concise 2-3 sentence overview explaining the core purpose and technique of the video.
+
+Return ONLY valid JSON (no markdown fences, no extra text):
 {
-  "title": "${videoMeta?.title ? videoMeta.title.replace(/"/g, '\\"') : 'descriptive title for the video'}",
+  "title": "${(cleanTitle || 'Video Summary').replace(/"/g, '\\"')}",
   "platform": "${parsed.platform}",
   "type": "${parsed.type}",
   "url": "${url}",
-  "source": "${videoMeta?.author_name ? videoMeta.author_name.replace(/"/g, '\\"') : 'creator or channel name'}",
-  "duration": "X:XX",
+  "source": "${(videoAuthor || 'Creator').replace(/"/g, '\\"')}",
+  "duration": "estimated duration e.g. 10:00 or 1:00:00",
+  "overview": "2-3 sentence executive overview of what this video teaches and who it is for",
   "points": [
-    {"timestamp":"0:00","seconds":0,"text":"opening context or hook"},
-    {"timestamp":"1:15","seconds":75,"text":"first main point"},
-    {"timestamp":"3:00","seconds":180,"text":"second main point"},
-    {"timestamp":"5:30","seconds":330,"text":"third main point"},
-    {"timestamp":"7:45","seconds":465,"text":"closing takeaway or call to action"}
+    {
+      "timestamp": "0:00",
+      "seconds": 0,
+      "text": "Detailed explanation of opening phase and technique..."
+    }
   ]
 }`
-    : `Summarize the content at this ${parsed.platform} URL: ${url}.${metaHint}
+    : `Summarize the content at this ${parsed.platform} URL: ${url}
+Title: "${cleanTitle || 'Page'}"
+${videoAuthor ? `Author/Source: "${videoAuthor}"` : ''}
 
-Return ONLY JSON:
+STRICT INSTRUCTIONS:
+1. Provide 4 to 6 highly informative, specific takeaways.
+2. NEVER output generic placeholder text like "insight 1" or "main point".
+
+Return ONLY valid JSON:
 {
-  "title": "${videoMeta?.title ? videoMeta.title.replace(/"/g, '\\"') : 'page or post title'}",
+  "title": "${(cleanTitle || 'Page Summary').replace(/"/g, '\\"')}",
   "platform": "${parsed.platform}",
   "type": "${parsed.type}",
   "url": "${url}",
-  "source": "${videoMeta?.author_name ? videoMeta.author_name.replace(/"/g, '\\"') : 'author or site name'}",
-  "points": ["insight 1","insight 2","insight 3","insight 4","insight 5"]
+  "source": "${(videoAuthor || 'Author').replace(/"/g, '\\"')}",
+  "overview": "2-3 sentence executive overview of the page content.",
+  "points": ["Specific insight 1", "Specific insight 2", "Specific insight 3", "Specific insight 4"]
 }`;
 
   try {
     const rawResult = await callGroq(prompt);
-    if (videoMeta?.title && (!rawResult.title || rawResult.title.includes('inferred') || rawResult.title === 'descriptive title for the video')) {
-      rawResult.title = videoMeta.title;
+    if (cleanTitle && (!rawResult.title || rawResult.title.includes('inferred') || rawResult.title === 'Video Summary')) {
+      rawResult.title = cleanTitle;
     }
-    if (videoMeta?.author_name && (!rawResult.source || rawResult.source.includes('likely') || rawResult.source === 'creator or channel name')) {
-      rawResult.source = videoMeta.author_name;
+    if (videoAuthor && (!rawResult.source || rawResult.source.includes('likely') || rawResult.source === 'Creator')) {
+      rawResult.source = videoAuthor;
     }
     rawResult.url = url;
     rawResult.platform = parsed.platform;
     rawResult.type = parsed.type;
+
+    // Sanitize any accidental placeholder text from LLM
+    const placeholderRegex = /^(opening context|first main point|second main point|third main point|closing takeaway|insight \d|hook)/i;
+    if (Array.isArray(rawResult.points)) {
+      rawResult.points = rawResult.points.filter(p => {
+        const text = (typeof p === 'string' ? p : p?.text || '').trim();
+        return !placeholderRegex.test(text);
+      });
+    }
+
     S.urlResult = rawResult;
 
     // Save to persistent URL summaries in localStorage
@@ -449,6 +522,7 @@ Return ONLY JSON:
   }
   S.urlLoading=false; render();
 }
+
 
 function deleteSummary(id) {
   S.urlSummaries = (S.urlSummaries || []).filter(s => s.id !== id);
@@ -620,6 +694,7 @@ function buildAdd() {
         <span style="font-size:11px;color:var(--text-success);margin-left:auto"><i class="ti ti-check"></i> Saved to History</span>
       </div>
       <div style="font-size:15px;font-weight:500;margin-bottom:12px;line-height:1.4">${r.title||'Summary'}</div>
+      ${r.overview ? `<div style="font-size:13px;color:var(--text-secondary);line-height:1.55;margin-bottom:14px;padding:9px 12px;background:var(--surface-1);border-radius:8px;border-left:3px solid var(--brand)">${r.overview}</div>` : ''}
       ${isVideo&&r.points?r.points.map(p=>{
         const href=r.platform==='youtube'?`${r.url}&t=${p.seconds}s`:r.url;
         return `<div class="bullet"><a class="ts-link${r.platform!=='youtube'?' ts-approx':''}" href="${href}" target="_blank" rel="noopener">${p.timestamp}</a><span class="bullet-text">${p.text}</span></div>`;
@@ -652,6 +727,7 @@ function renderSummaryCard(r, id = null) {
     <a href="${r.url || '#'}" target="_blank" rel="noopener" class="card-title">
       ${r.title || 'Summary'} <i class="ti ti-external-link" style="font-size:12px;color:var(--text-muted)"></i>
     </a>
+    ${r.overview ? `<div style="font-size:13px;color:var(--text-secondary);line-height:1.55;margin-bottom:14px;padding:9px 12px;background:var(--surface-1);border-radius:8px;border-left:3px solid var(--brand)">${r.overview}</div>` : ''}
     ${isVideo && Array.isArray(r.points) && typeof r.points[0] === 'object' ? r.points.map(p => {
       const href = r.platform === 'youtube' && p.seconds !== undefined ? `${r.url}&t=${p.seconds}s` : r.url;
       return `<div class="bullet"><a class="ts-link${r.platform !== 'youtube' ? ' ts-approx' : ''}" href="${href}" target="_blank" rel="noopener">${p.timestamp || '0:00'}</a><span class="bullet-text">${p.text || ''}</span></div>`;
