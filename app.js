@@ -309,15 +309,112 @@ async function init() {
     ]
   };
 
+  const seedAstra = {
+    id: 'sum-seed-astra',
+    canonicalKey: 'youtube:PEEBZwGetyc',
+    title: 'How I Save 92% of My AI Credits With GPT-6 Astra + Blender (Full Workflow)',
+    platform: 'youtube',
+    type: 'Video',
+    url: 'https://youtu.be/PEEBZwGetyc',
+    source: 'Sanji Nai-Chien',
+    duration: '16:15',
+    date: TODAY,
+    createdAt: new Date().toISOString(),
+    overview: 'This AI filmmaking tutorial demonstrates how to run GPT-6 Astra inside Codex with Computer Use and the Higgsfield AI Blender plugin to create cinematic 3D product commercials. By using a lightweight Blender 3D previz rather than raw text prompting, creators achieve precise camera angles and lighting while slashing AI video generation credits by 92%.',
+    takeaways: [
+      'A Blender 3D previz provides generative AI models exact spatial geometry, cutting credit burn by 92% compared to pure prompt-and-pray iterations.',
+      'GPT-6 Astra with Codex and Computer Use automatically translates chat instructions into editable Blender 3D scenes.',
+      'Phone gyro motion can be recorded and transferred directly into Blender virtual cameras for realistic, organic cinematography.',
+      'A single 3D previz layout can be re-rendered across multiple products, enabling scalable commercial production.'
+    ],
+    phases: [
+      {
+        title: 'Why GPT-6 Astra Is the New AI King for 3D',
+        timeRange: '0:00 - 1:40',
+        timestamp: '0:00',
+        seconds: 0,
+        summary: 'Overview of why traditional text-to-video AI burns enormous credit budgets due to random camera drift and lighting inconsistencies.',
+        subPoints: [
+          'Raw prompting forces creators to re-roll generations 10-20 times for a single usable angle.',
+          'GPT-6 Astra incorporates 3D spatial awareness to bridge standard 3D software with generative diffusion.'
+        ]
+      },
+      {
+        title: 'Setup: Higgsfield Blender Plugin + Codex',
+        timeRange: '1:40 - 2:50',
+        timestamp: '1:40',
+        seconds: 100,
+        summary: 'Installing and connecting the Higgsfield AI Blender plugin with OpenAI Codex Computer Use.',
+        subPoints: [
+          'Codex interprets natural language instructions and executes Python API commands in Blender.',
+          'Scene Builder automatically populates 3D primitives and cameras matching prompt specs.'
+        ]
+      },
+      {
+        title: 'Building the Earbuds Commercial From Scratch',
+        timeRange: '2:50 - 5:45',
+        timestamp: '2:50',
+        seconds: 170,
+        summary: 'Step-by-step assembly of a photorealistic earbuds product commercial using procedural lighting and camera rigging.',
+        subPoints: [
+          'Setting up three-point studio lighting and turntable camera movement.',
+          'Importing basic geometry and locking focus distances on the product mesh.'
+        ]
+      },
+      {
+        title: 'Blender Previz vs. Prompt-Only Generation',
+        timeRange: '5:45 - 7:40',
+        timestamp: '5:45',
+        seconds: 345,
+        summary: 'Direct cost and quality comparison showing how previz guidance saves 92% of generation credits.',
+        subPoints: [
+          'Prompt-only generations required 120 credits across failed takes to get one coherent shot.',
+          'Previz-guided Astra generations nailed framing on attempt 1, costing under 10 credits.'
+        ]
+      },
+      {
+        title: 'One Previz, Three Products & Phone Gyro Camera',
+        timeRange: '7:40 - 11:00',
+        timestamp: '7:40',
+        seconds: 460,
+        summary: 'Reusing a single previz setup across cosmetics, tech devices, and beverages while capturing handheld phone motion.',
+        subPoints: [
+          'Swap 3D asset in center while keeping identical lighting, camera move, and render pipeline.',
+          'Map smartphone motion sensors straight into Blender camera transform matrices for natural handheld shake.'
+        ]
+      },
+      {
+        title: '30-Second Continuous Shot & Astra vs. Fable 5.1',
+        timeRange: '11:00 - 16:15',
+        timestamp: '11:00',
+        seconds: 660,
+        summary: 'Creating a seamless 30-second unbroken cinematic shot and comparing benchmark results against Fable 5.1.',
+        subPoints: [
+          'Continuous camera flight path through multiple commercial environments without cutting.',
+          'Astra outperforms Fable 5.1 in edge fidelity, product reflection realism, and temporal consistency.'
+        ]
+      }
+    ],
+    points: [
+      { timestamp: "0:00", seconds: 0, text: "Why GPT-6 Astra Is the AI King for 3D (0:00 - 1:40): Solving the credit burn crisis." },
+      { timestamp: "1:40", seconds: 100, text: "Setup: Higgsfield Blender Plugin + Codex (1:40 - 2:50): Connecting AI chat to 3D." },
+      { timestamp: "2:50", seconds: 170, text: "Building the Earbuds Commercial (2:50 - 5:45): Studio lighting and turntable camera." },
+      { timestamp: "5:45", seconds: 345, text: "Blender Previz vs. Prompt Only (5:45 - 7:40): 92% credit savings proof." },
+      { timestamp: "7:40", seconds: 460, text: "Reusing Previz & Phone Gyro (7:40 - 11:00): Transferring real phone motion to virtual camera." },
+      { timestamp: "11:00", seconds: 660, text: "30-Second Continuous Shot & Benchmark (11:00 - 16:15): Astra vs. Fable 5.1 head-to-head." }
+    ]
+  };
+
   // Register in persistent url-cache store
   ss('url-cache:youtube:vwLVjHEGGK0', seedVipassana);
   ss('url-cache:youtube:Qsi9MeLh95Q', seedAiVideo);
+  ss('url-cache:youtube:PEEBZwGetyc', seedAstra);
 
   // Upgrade or seed S.urlSummaries with latest rich seeds
   const otherSummaries = (S.urlSummaries || []).filter(s => 
-    !(s.url || '').includes('vwLVjHEGGK0') && !(s.url || '').includes('Qsi9MeLh95Q')
+    !(s.url || '').includes('vwLVjHEGGK0') && !(s.url || '').includes('Qsi9MeLh95Q') && !(s.url || '').includes('PEEBZwGetyc')
   );
-  S.urlSummaries = [seedVipassana, seedAiVideo, ...otherSummaries];
+  S.urlSummaries = [seedAstra, seedVipassana, seedAiVideo, ...otherSummaries];
   ss('ai-summaries', S.urlSummaries);
 
   refreshHistoryDates();
@@ -367,37 +464,103 @@ function changeModel(id) {
   render();
 }
 
-// ── Core API call ────────────────────────────────────────────────
+// ── Core API call & Resilient JSON Parser ─────────────────────────
+function cleanAndParseJSON(rawText) {
+  if (!rawText || typeof rawText !== 'string') {
+    throw new Error('Model returned an empty response. Try again.');
+  }
+
+  // Extract outer-most JSON object or array
+  const firstBrace = rawText.indexOf('{');
+  const lastBrace = rawText.lastIndexOf('}');
+  let jsonStr = (firstBrace !== -1 && lastBrace > firstBrace)
+    ? rawText.slice(firstBrace, lastBrace + 1)
+    : rawText.trim();
+
+  // 1. Direct parse attempt
+  try {
+    return JSON.parse(jsonStr);
+  } catch (e1) {}
+
+  // 2. Comprehensive sanitation for LLM syntax defects (e.g. [...], trailing commas)
+  let cleaned = jsonStr
+    // Remove markdown code fences if any
+    .replace(/```(?:json)?/gi, '')
+    // Replace empty/standalone ellipsis arrays: [...] or [ ... ] -> []
+    .replace(/\[\s*\.\.\.\s*\]/g, '[]')
+    // Replace trailing ellipsis in arrays: , ... ] -> ]
+    .replace(/,\s*\.\.\.\s*\]/g, ']')
+    // Replace leading/standalone ellipsis in arrays: [ ... , -> [
+    .replace(/\[\s*\.\.\.\s*,/g, '[')
+    // Replace ellipsis in middle of arrays: , ... , -> ,
+    .replace(/,\s*\.\.\.\s*,/g, ',')
+    // Replace trailing ellipsis in objects: , ... } -> }
+    .replace(/,\s*\.\.\.\s*\}/g, '}')
+    // Replace property values that are just ... -> null
+    .replace(/:\s*\.\.\.\s*([,\n\}])/g, ': null$1')
+    // Replace trailing commas before closing brackets or braces
+    .replace(/,\s*([\]\}])/g, '$1')
+    // Remove unescaped control chars (except \r, \n, \t)
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '');
+
+  try {
+    return JSON.parse(cleaned);
+  } catch (e2) {
+    const fixedTrailing = cleaned.replace(/,\s*([\]\}])/g, '$1');
+    try {
+      return JSON.parse(fixedTrailing);
+    } catch (e3) {
+      throw new Error(`Model returned invalid JSON (${e2.message}). Please click Re-analyze.`);
+    }
+  }
+}
+
 async function callGroq(prompt, maxTokens = 2048) {
   if (!S.apiKey) throw new Error('NO_KEY');
   if (!S.activeModel) throw new Error('No model selected — refresh the page or re-enter your API key.');
 
-  const res = await fetch(GROQ_API, {
+  const requestBody = {
+    model: S.activeModel,
+    max_tokens: maxTokens,
+    temperature: 0.3,
+    response_format: { type: "json_object" },
+    messages: [
+      { role: 'system', content: 'You are an AI research assistant. You must always return a strictly valid standard JSON object. Never use ellipses (...), never omit array items, and never use markdown code fences.' },
+      { role: 'user', content: prompt }
+    ],
+  };
+
+  let res = await fetch(GROQ_API, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${S.apiKey}` },
-    body: JSON.stringify({
-      model: S.activeModel,
-      max_tokens: maxTokens,
-      temperature: 0.4,
-      messages: [
-        { role: 'system', content: 'You are an AI research assistant. Always respond with raw valid JSON only — no markdown, no backticks, no explanation.' },
-        { role: 'user',   content: prompt }
-      ],
-    }),
+    body: JSON.stringify(requestBody),
   });
+
+  // If the model rejects response_format (e.g. older Gemma), retry without it
+  if (!res.ok && res.status === 400) {
+    const errBody = await res.json().catch(() => ({}));
+    if (errBody.error?.message?.includes('response_format')) {
+      delete requestBody.response_format;
+      res = await fetch(GROQ_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${S.apiKey}` },
+        body: JSON.stringify(requestBody),
+      });
+    } else {
+      throw new Error(errBody.error?.message || `HTTP ${res.status}`);
+    }
+  }
 
   if (res.status === 401) { S.apiKeyValid = false; throw new Error('API key invalid or expired.'); }
   if (!res.ok) {
-    const e = await res.json().catch(()=>({}));
+    const e = await res.json().catch(() => ({}));
     throw new Error(e.error?.message || `HTTP ${res.status}`);
   }
 
   const data = await res.json();
   S.apiKeyValid = true;
   const text = data.choices?.[0]?.message?.content || '';
-  const match = text.match(/\{[\s\S]*\}/);
-  if (!match) throw new Error('Model returned no JSON. Try again.');
-  return JSON.parse(match[0]);
+  return cleanAndParseJSON(text);
 }
 
 // ── URL parser & Canonicalizer ──────────────────────────────────────
@@ -763,27 +926,25 @@ async function summarizeURL(forceRefresh = false) {
   const videoAuthor = videoMeta?.author_name || '';
 
   const prompt = isVideo
-    ? `You are an elite video analyst and instructional summarizer analyzing this ${parsed.platform} video:
+    ? `You are an elite video summarizer and research analyst. Produce an authoritative, comprehensive, deeply technical and highly structured summary of this video:
 URL: ${url}
 Title: "${cleanTitle || 'Video'}"
-${videoAuthor ? `Creator / Channel: "${videoAuthor}"` : ''}
+${videoAuthor ? `Channel / Creator: "${videoAuthor}"` : ''}
 
-GOAL: Produce an authoritative, deep, and structured summary that reads like expert notes.
-
-CRITICAL CONTENT GUIDELINES:
-1. Executive Overview: 2-3 detailed sentences explaining what this video is, who is leading/presenting it, who it is for, and its primary technique, thesis, or goal.
-2. Chronological Milestones / Key Phases: 4 to 6 major chronological phases across the video.
-   - For EVERY phase provide:
-     * "title": A clear, descriptive name of the phase/chapter (e.g. "Anapana (Breath Awareness)", "Story & Prompt Generation", "Core Circuit Workout", "Model Architecture").
-     * "timeRange": A realistic time range in format "M:SS - M:SS" or "H:MM:SS - H:MM:SS" (e.g. "2:36 - 10:35").
-     * "timestamp": Start timestamp (e.g. "2:36").
-     * "seconds": Start in total seconds (e.g. 156).
-     * "summary": 1-2 detailed sentences summarizing what happens in this phase.
-     * "subPoints": An array of 2-3 specific, actionable details, techniques, terminology, tools, or tips taught in this phase.
+GOAL: Produce an insightful, structured summary that feels like an expert breakdown.
+1. Executive Overview: 2-3 sentences explaining what this video is about, the creator's core methodology or thesis, and who benefits from it.
+2. Key Phases / Chapters: Break down the video into 4 to 8 sequential phases or topics. For each phase provide:
+   - "title": Descriptive, meaningful chapter name
+   - "timeRange": e.g. "0:00 - 2:30" (or approximate if unknown)
+   - "timestamp": Start timestamp e.g. "0:00"
+   - "seconds": Start time in seconds (integer)
+   - "summary": 2-3 sentences explaining the concepts, tools, or techniques demonstrated
+   - "subPoints": 2-3 specific actionable sub-points, settings, workflows, or rules of thumb mentioned
 3. Key Takeaways: 3-4 bulleted core principles, rules of thumb, or key lessons.
 4. STRICT FORBIDDEN LIST:
    - NEVER use placeholder text: "opening context", "first main point", "second main point", "hook", "insight 1", "key takeaway", "closing thoughts".
    - NEVER write vague or empty sentences. Every single point must contain real domain concepts, instructions, or insights.
+   - NEVER use ellipses (...) or placeholder brackets [...] in any array or object. Output strictly valid standard JSON with complete string values.
 
 Return ONLY valid JSON (no markdown fences, no extra text):
 {
@@ -805,7 +966,7 @@ Return ONLY valid JSON (no markdown fences, no extra text):
       "timeRange": "0:00 - 3:15",
       "timestamp": "0:00",
       "seconds": 0,
-      "summary": "Detailed summary of what happens in this phase...",
+      "summary": "Detailed summary of what happens in this phase without trailing dots",
       "subPoints": [
         "Specific actionable detail or technique A",
         "Specific actionable detail or technique B"
@@ -822,7 +983,7 @@ GOAL: Produce an authoritative, comprehensive summary.
 1. Executive Overview: 2-3 sentences explaining the background, main thesis, and significance.
 2. Key Sections / Topics: 4 to 6 detailed sections, each with a title, summary, and 2-3 specific sub-points.
 3. Key Takeaways: 3-4 actionable insights or conclusions.
-4. FORBIDDEN: Do not use placeholders or generic phrases.
+4. FORBIDDEN: Do not use placeholders, generic phrases, ellipses (...), or placeholder brackets [...].
 
 Return ONLY valid JSON (no markdown fences, no extra text):
 {
@@ -840,14 +1001,14 @@ Return ONLY valid JSON (no markdown fences, no extra text):
   "phases": [
     {
       "title": "Section Title",
-      "summary": "Detailed section summary...",
+      "summary": "Detailed section summary explaining key concepts and findings",
       "subPoints": [
         "Specific detail 1",
         "Specific detail 2"
       ]
     }
   ]
-}`;
+};`;
 
   try {
     const rawResult = await callGroq(prompt, 3000);
