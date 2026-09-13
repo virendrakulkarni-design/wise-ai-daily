@@ -108,8 +108,23 @@ async function init() {
   S.todayDigest = sg('digest:'+TODAY);
   S.historyDates = sl('digest:').map(k=>k.replace('digest:','')).sort().reverse().filter(d=>d!==TODAY);
   S.showSetup   = !S.apiKey;
+
+  // Check for URL shared via iOS Shortcut or share.html redirect
+  const pending = sessionStorage.getItem('pending-share');
+  if (pending) {
+    sessionStorage.removeItem('pending-share');
+    S.tab = 'add';
+    S.urlInput = pending;
+  }
+
   render();
-  if (S.apiKey) await loadModels(S.apiKey);
+  if (S.apiKey) {
+    await loadModels(S.apiKey);
+    // Auto-summarize if a URL was shared in (after models are loaded)
+    if (pending && S.activeModel) {
+      setTimeout(() => summarizeURL(), 300);
+    }
+  }
 }
 
 // ── Save API key ─────────────────────────────────────────────────
@@ -255,6 +270,35 @@ Return ONLY this JSON:
     else S.loadError = e.message;
   }
   S.loading=false; render();
+}
+
+// ── Paste from clipboard & summarize (one tap) ───────────────────
+async function pasteAndSummarize() {
+  if (!S.apiKey) { S.showSetup=true; render(); return; }
+  S.urlError = '';
+  try {
+    const text = await navigator.clipboard.readText();
+    const trimmed = (text || '').trim();
+    if (!trimmed) {
+      S.urlError = 'Clipboard is empty. Copy a link first (Share → Copy Link).';
+      render();
+      return;
+    }
+    // Extract a URL if the clipboard has extra text around it
+    const match = trimmed.match(/https?:\/\/[^\s]+/);
+    const url = match ? match[0] : trimmed;
+    if (!parseURL(url)) {
+      S.urlError = "Clipboard doesn't contain a valid URL.";
+      render();
+      return;
+    }
+    S.urlInput = url;
+    render();
+    await summarizeURL();
+  } catch (e) {
+    S.urlError = 'Could not read clipboard. Your browser may need permission — try pasting manually instead.';
+    render();
+  }
 }
 
 // ── Summarise URL ────────────────────────────────────────────────
@@ -415,31 +459,29 @@ function buildFeed() {
 function buildAdd() {
   const r=S.urlResult;
   const isVideo=r&&['youtube','instagram','facebook'].includes(r.platform);
-  const isPWA=window.matchMedia('(display-mode:standalone)').matches||!!window.navigator.standalone;
   return `
-    <div class="card" style="margin-bottom:12px;border-color:rgba(108,63,197,0.4);background:var(--bg-accent)">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
-        <i class="ti ti-device-mobile" style="color:var(--brand);font-size:20px"></i>
-        <span style="font-size:14px;font-weight:600;color:var(--brand)">Share from iPhone — any app</span>
+    <!-- iPhone Shortcut card -->
+    <div class="card" style="margin-bottom:14px;background:linear-gradient(135deg,rgba(108,63,197,0.12),rgba(168,85,247,0.08));border-color:rgba(108,63,197,0.3)">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <div style="width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,#6c3fc5,#a855f7);display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 4px 12px rgba(108,63,197,0.4)">
+          <i class="ti ti-bolt" style="color:#fff;font-size:22px"></i>
+        </div>
+        <div>
+          <div style="font-size:15px;font-weight:700;color:var(--text-primary)">Share from any iPhone app</div>
+          <div style="font-size:12px;color:var(--text-muted)">YouTube · Instagram · Facebook · X · Safari</div>
+        </div>
       </div>
-      ${isPWA?`
-      <div style="display:flex;flex-direction:column;gap:10px">
-        <div style="display:flex;gap:10px;align-items:flex-start"><span style="width:22px;height:22px;border-radius:50%;background:var(--brand);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">1</span><div style="font-size:13px;color:var(--text-secondary);line-height:1.5">Open any video in <strong>YouTube</strong>, <strong>Instagram</strong>, <strong>Facebook</strong>, <strong>X</strong>, Safari…</div></div>
-        <div style="display:flex;gap:10px;align-items:flex-start"><span style="width:22px;height:22px;border-radius:50%;background:var(--brand);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">2</span><div style="font-size:13px;color:var(--text-secondary);line-height:1.5">Tap the <strong>Share</strong> button ⎋</div></div>
-        <div style="display:flex;gap:10px;align-items:flex-start"><span style="width:22px;height:22px;border-radius:50%;background:var(--brand);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">3</span><div style="font-size:13px;color:var(--text-secondary);line-height:1.5">Scroll the share sheet and tap <strong>"AI Daily"</strong> — opens here and summarizes automatically ✨</div></div>
+      <div style="font-size:13px;color:var(--text-secondary);line-height:1.6;margin-bottom:14px">
+        Install the <strong style="color:var(--text-primary)">AI Daily Shortcut</strong> once — then tap Share → AI Daily in any app and it summarizes automatically.
       </div>
-      <div style="margin-top:12px;padding:8px 12px;background:var(--bg-success);border-radius:8px;font-size:12px;color:var(--text-success);display:flex;align-items:center;gap:6px"><i class="ti ti-circle-check"></i> Installed — AI Daily appears in your iPhone share sheet</div>
-      `:`
-      <div style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;line-height:1.5">Install this app first so it appears in your iPhone share sheet:</div>
-      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px">
-        <div style="display:flex;gap:10px;align-items:flex-start"><span style="width:22px;height:22px;border-radius:50%;background:var(--brand);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">1</span><div style="font-size:13px;color:var(--text-secondary);line-height:1.5">Open this page in <strong>Safari</strong> on your iPhone</div></div>
-        <div style="display:flex;gap:10px;align-items:flex-start"><span style="width:22px;height:22px;border-radius:50%;background:var(--brand);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">2</span><div style="font-size:13px;color:var(--text-secondary);line-height:1.5">Tap the <strong>Share</strong> button ⎋ at the bottom of Safari</div></div>
-        <div style="display:flex;gap:10px;align-items:flex-start"><span style="width:22px;height:22px;border-radius:50%;background:var(--brand);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">3</span><div style="font-size:13px;color:var(--text-secondary);line-height:1.5">Tap <strong>"Add to Home Screen"</strong> → <strong>Add</strong></div></div>
-        <div style="display:flex;gap:10px;align-items:flex-start"><span style="width:22px;height:22px;border-radius:50%;background:var(--brand);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">4</span><div style="font-size:13px;color:var(--text-secondary);line-height:1.5">Now open any reel/video → Share → tap <strong>"AI Daily"</strong> ✨</div></div>
-      </div>
-      <div style="padding:8px 12px;background:var(--bg-warning);border-radius:8px;font-size:12px;color:var(--text-warning);display:flex;align-items:center;gap:6px"><i class="ti ti-info-circle"></i> Requires <strong>Safari</strong> on iPhone — Chrome won't show "Add to Home Screen"</div>
-      `}
+      <a href="/wise-ai-daily/shortcut.html"
+         style="display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;background:linear-gradient(135deg,#6c3fc5,#a855f7);color:#fff;border-radius:10px;font-size:14px;font-weight:600;text-decoration:none;box-shadow:0 4px 16px rgba(108,63,197,0.4)">
+        <i class="ti ti-bolt" style="font-size:18px"></i> Install iPhone Shortcut
+      </a>
+      <div style="margin-top:10px;font-size:11px;color:var(--text-muted);text-align:center">Takes 30 seconds · Works with all iOS apps</div>
     </div>
+
+    <!-- Supported platforms -->
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
       <span style="font-size:12px;color:var(--text-muted);line-height:26px;margin-right:2px">Works with:</span>
       <span class="tag t-yt"><i class="ti ti-brand-youtube"></i> YouTube</span>
@@ -449,7 +491,13 @@ function buildAdd() {
       <span class="tag t-gh"><i class="ti ti-brand-github"></i> GitHub</span>
       <span class="tag t-web"><i class="ti ti-world"></i> Any URL</span>
     </div>
-    <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px">Or paste a URL manually:</div>
+    <!-- One-tap clipboard paste -->
+    <button onclick="pasteAndSummarize()" ${S.urlLoading||S.modelsLoading?'disabled':''}
+      style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:13px;background:var(--surface-2);border:1.5px solid var(--brand);color:var(--brand);border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:14px">
+      <i class="ti ti-clipboard-check" style="font-size:19px"></i> Paste & Summarize
+    </button>
+
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px">Or type/paste a URL manually:</div>
     <div style="display:flex;gap:8px;margin-bottom:8px">
       <input class="input-field" type="url" placeholder="Paste any URL here…"
         value="${S.urlInput}"

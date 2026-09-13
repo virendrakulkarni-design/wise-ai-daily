@@ -3,14 +3,12 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>AI Daily — Shared</title>
-  <meta http-equiv="refresh" content="0;url=/wise-ai-daily/">
+  <title>AI Daily</title>
   <script>
-    // Grab the shared URL from query params and pass via sessionStorage
     const p = new URLSearchParams(location.search);
-    const shared = p.get('url') || p.get('text')?.match(/https?:\/\/[^\s]+/)?.[0] || '';
-    if (shared) sessionStorage.setItem('pending-share', shared);
-    location.replace('/wise-ai-daily/');
+    const u = p.get('url') || p.get('text')?.match(/https?:\/\/[^\s]+/)?.[0] || p.get('share') || '';
+    if (u) sessionStorage.setItem('pending-share', u);
+    location.replace('/wise-ai-daily/' + (u ? '?share=' + encodeURIComponent(u) : ''));
   </script>
 </head>
 <body></body>

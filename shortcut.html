@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+  <title>AI Daily — Set Up iPhone Sharing</title>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="theme-color" content="#6c3fc5"/>
+  <link rel="apple-touch-icon" href="icons/icon-192.png"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css"/>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#13111a;color:#f0ede8;min-height:100vh;padding:0 0 40px}
+    .hero{background:linear-gradient(160deg,#2d1060 0%,#1a0a40 60%,#13111a 100%);padding:44px 24px 36px;text-align:center}
+    .logo{width:72px;height:72px;border-radius:18px;background:linear-gradient(135deg,#6c3fc5,#a855f7);display:flex;align-items:center;justify-content:center;margin:0 auto 18px;box-shadow:0 8px 32px rgba(108,63,197,0.5)}
+    .logo i{font-size:38px;color:#fff}
+    h1{font-size:25px;font-weight:700;margin-bottom:8px}
+    .hero p{font-size:15px;color:#a8a6c0;line-height:1.6;max-width:340px;margin:0 auto}
+    .content{max-width:480px;margin:0 auto;padding:0 20px}
+    .section{margin-top:30px}
+    .section-title{font-size:12px;font-weight:700;color:#a855f7;letter-spacing:.06em;text-transform:uppercase;margin-bottom:16px}
+    .step{display:flex;gap:14px;align-items:flex-start;margin-bottom:22px}
+    .step-num{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#6c3fc5,#a855f7);color:#fff;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 4px 12px rgba(108,63,197,0.4)}
+    .step-body strong{color:#f0ede8;display:block;font-size:15px;margin-bottom:4px}
+    .step-body span{color:#a8a6c0;font-size:14px;line-height:1.55;display:block}
+    .chip{display:inline-flex;align-items:center;gap:4px;background:rgba(168,85,247,0.15);border:0.5px solid rgba(168,85,247,0.3);border-radius:6px;padding:2px 8px;font-size:13px;color:#c084fc;font-family:ui-monospace,monospace;margin:2px 2px}
+    .url-box{background:rgba(255,255,255,0.05);border:0.5px solid rgba(255,255,255,0.1);border-radius:10px;padding:12px 14px;font-family:ui-monospace,monospace;font-size:12.5px;color:#c084fc;word-break:break-all;margin-top:8px;position:relative}
+    .copy-btn{position:absolute;top:8px;right:8px;background:rgba(168,85,247,0.2);border:none;border-radius:6px;padding:5px 9px;color:#c084fc;font-size:11px;cursor:pointer;font-family:-apple-system,sans-serif}
+    .copy-btn:active{background:rgba(168,85,247,0.4)}
+    .screenshot-hint{background:rgba(255,255,255,0.03);border:1px dashed rgba(255,255,255,0.15);border-radius:12px;padding:14px 16px;margin-top:8px;font-size:13px;color:#8a87a0;line-height:1.6}
+    .divider{display:flex;align-items:center;gap:12px;margin:36px 0;color:#6a6780;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+    .divider::before,.divider::after{content:'';flex:1;height:1px;background:rgba(255,255,255,0.1)}
+    .alt-card{background:rgba(255,255,255,0.04);border:0.5px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px}
+    .alt-card .icon{width:44px;height:44px;border-radius:12px;background:rgba(108,63,197,0.2);display:flex;align-items:center;justify-content:center;margin-bottom:12px}
+    .alt-card .icon i{font-size:22px;color:#a855f7}
+    .alt-card h3{font-size:16px;font-weight:700;margin-bottom:6px}
+    .alt-card p{font-size:13.5px;color:#a8a6c0;line-height:1.6;margin-bottom:14px}
+    .btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:13px;background:linear-gradient(135deg,#6c3fc5,#a855f7);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;text-decoration:none;box-shadow:0 4px 16px rgba(108,63,197,0.35)}
+    .btn-shortcuts{background:linear-gradient(135deg,#000,#333)}
+    .note{background:rgba(168,85,247,0.08);border:0.5px solid rgba(168,85,247,0.2);border-radius:12px;padding:14px 16px;margin-top:28px;font-size:13px;color:#c084fc;line-height:1.6}
+    .note i{margin-right:6px}
+    .back-link{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:28px;color:#8a87c0;text-decoration:none;font-size:14px}
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <div class="logo"><i class="ti ti-share"></i></div>
+    <h1>Share to AI Daily</h1>
+    <p>Two ways to get any link into the app fast — pick whichever fits how you browse.</p>
+  </div>
+
+  <div class="content">
+
+    <!-- OPTION A: Build your own Shortcut -->
+    <div class="section">
+      <div class="section-title"><i class="ti ti-bolt" style="margin-right:4px"></i>Option 1 — Real share-sheet button (best)</div>
+      <div style="font-size:13.5px;color:#a8a6c0;line-height:1.6;margin-bottom:20px">
+        Build a tiny 2-step Shortcut using Apple's own Shortcuts app. Takes about a minute, and once it's built it shows up as <strong style="color:#f0ede8">"AI Daily"</strong> in the Share Sheet of every app — YouTube, Instagram, Facebook, X, Safari, all of them.
+      </div>
+
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <strong>Open the Shortcuts app</strong>
+          <span>It's pre-installed on every iPhone. Tap the <span class="chip">+</span> button top-right to create a new shortcut.</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <strong>Add action: "Get URLs from Input"</strong>
+          <span>Tap <span class="chip">Add Action</span>, search for <span class="chip">Get URLs from Input</span>, and add it.</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <strong>Add action: "Open URLs"</strong>
+          <span>Search for <span class="chip">Open URLs</span> and add it below the first action. Tap on its URL field.</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-body">
+          <strong>Type this text, then insert the variable</strong>
+          <span>In the URL field type the text below, then tap right after it and insert the <span class="chip">Provided Input</span> variable from step 2 (it appears above the keyboard):</span>
+          <div class="url-box" id="url-template">
+            https://virendrakulkarni-design.github.io/wise-ai-daily/?share=
+            <button class="copy-btn" onclick="copyText('url-template', this)">Copy</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">5</div>
+        <div class="step-body">
+          <strong>Rename & enable sharing</strong>
+          <span>Tap the shortcut's name at the top → rename to <span class="chip">AI Daily</span>. Tap the settings icon (⚙️) → turn on <span class="chip">Show in Share Sheet</span> → set accepted types to <span class="chip">URLs</span> and <span class="chip">Safari web pages</span>.</span>
+        </div>
+      </div>
+
+      <div class="step" style="margin-bottom:0">
+        <div class="step-num">✓</div>
+        <div class="step-body">
+          <strong>Done — test it</strong>
+          <span>Open any video or link → tap <strong>Share</strong> → scroll down → tap <strong>AI Daily</strong>. It opens the app and drops the link straight into the summarizer.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="divider">or</div>
+
+    <!-- OPTION B: Clipboard paste -->
+    <div class="alt-card">
+      <div class="icon"><i class="ti ti-clipboard"></i></div>
+      <h3>Option 2 — One-tap clipboard paste</h3>
+      <p>No setup needed. Copy any link with Share → Copy Link, then open AI Daily and tap the <strong>Paste & Summarize</strong> button — it reads your clipboard automatically, no typing or manual pasting required.</p>
+      <a class="btn" href="/wise-ai-daily/"><i class="ti ti-clipboard-check"></i> Try it now</a>
+    </div>
+
+    <div class="note">
+      <i class="ti ti-lock"></i>
+      Nothing is uploaded when you build the Shortcut — it only passes the link's text to AI Daily, which you already control with your own Groq API key.
+    </div>
+
+    <a class="back-link" href="/wise-ai-daily/">
+      <i class="ti ti-arrow-left" style="font-size:15px"></i> Back to AI Daily
+    </a>
+  </div>
+
+  <script>
+    function copyText(id, btn) {
+      const el = document.getElementById(id);
+      const text = el.childNodes[0].textContent.trim();
+      navigator.clipboard.writeText(text).then(() => {
+        const orig = btn.textContent;
+        btn.textContent = 'Copied!';
+        setTimeout(() => btn.textContent = orig, 1500);
+      });
+    }
+  </script>
+</body>
+</html>
