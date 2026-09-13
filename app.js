@@ -819,6 +819,22 @@ function closeLightbox() {
   render();
 }
 
+function getYouTubeVideoId(r, p) {
+  if (p && p.videoId) return p.videoId;
+  if (r && r.videoId) return r.videoId;
+  if (r && r.canonicalKey && r.canonicalKey.startsWith('youtube:')) {
+    return r.canonicalKey.replace('youtube:', '');
+  }
+  const parsed = parseURL(r?.url || '');
+  if (parsed && parsed.platform === 'youtube' && parsed.id) {
+    return parsed.id;
+  }
+  if (r && r.platform === 'youtube' && r.id && !r.id.startsWith('sum-')) {
+    return r.id;
+  }
+  return null;
+}
+
 function buildLightbox() {
   if (!S.lightbox) return '';
   return `
@@ -1346,19 +1362,20 @@ function renderSummaryCard(r, id = null, opts = {}) {
       </div>
       ${r.phases.map((p, idx) => {
         const timeRange = p.timeRange || p.timestamp || '';
-        const jumpHref = (r.platform === 'youtube' && p.seconds !== undefined) ? `${r.url}&t=${p.seconds}s` : r.url;
         const snapshotKey = `${cardId}_${idx}`;
         const isSnapshotOpen = S.showSnapshots || !!S.activeSnapshots[snapshotKey];
         const isPlaying = !!S.activePlayerMoments[snapshotKey];
-        const parsedUrl = parseURL(r.url || '');
-        const youtubeId = (r.platform === 'youtube') ? (p.videoId || r.id || parsedUrl?.id) : null;
+        const youtubeId = (r.platform === 'youtube') ? getYouTubeVideoId(r, p) : null;
+        const jumpHref = (r.platform === 'youtube' && youtubeId && p.seconds !== undefined) 
+          ? `https://youtu.be/${youtubeId}?t=${p.seconds}` 
+          : (r.url ? `${r.url}&t=${p.seconds}s` : '#');
         const snapshotImg = p.snapshotUrl 
           ? resolveAssetUrl(p.snapshotUrl) 
           : (youtubeId && p.seconds !== undefined ? resolveAssetUrl(`snapshots/${youtubeId}/snap_${p.seconds}.jpg`) : null);
 
         return `<div class="phase-card">
           <div class="phase-header">
-            ${timeRange ? `<a class="ts-pill" href="${jumpHref}" target="_blank" rel="noopener" title="Jump to timestamp in video"><i class="ti ti-player-play"></i> ${timeRange}</a>` : ''}
+            ${timeRange ? `<a class="ts-pill" href="${jumpHref}" target="_blank" rel="noopener" title="Jump to timestamp on YouTube"><i class="ti ti-player-play"></i> ${timeRange}</a>` : ''}
             ${isVideo ? `
               <button class="ts-pill btn-snapshot-pill ${isSnapshotOpen ? 'active' : ''}" onclick="togglePhaseSnapshot('${cardId}', ${idx})" title="Show/hide snapshot of this key moment">
                 <i class="ti ti-camera"></i> Snapshot
@@ -1371,8 +1388,11 @@ function renderSummaryCard(r, id = null, opts = {}) {
             <div class="moment-snapshot-box">
               ${isPlaying && youtubeId ? `
                 <div class="snapshot-video-wrapper">
-                  <iframe class="snapshot-iframe" src="https://www.youtube-nocookie.com/embed/${youtubeId}?start=${p.seconds || 0}&autoplay=1&rel=0" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
-                  <div style="display:flex;justify-content:flex-end;margin-top:6px;padding:4px 8px">
+                  <iframe class="snapshot-iframe" src="https://www.youtube.com/embed/${youtubeId}?start=${p.seconds || 0}&autoplay=1" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;padding:4px 8px">
+                    <a href="https://youtu.be/${youtubeId}?t=${p.seconds || 0}" target="_blank" rel="noopener" class="btn-ghost" style="padding:2px 8px;font-size:11px" title="Open directly in YouTube">
+                      <i class="ti ti-external-link"></i> Open on YouTube (${timeRange})
+                    </a>
                     <button class="btn-ghost" style="padding:2px 8px;font-size:11px" onclick="closeSnapshotPlayer('${cardId}', ${idx})">
                       <i class="ti ti-x"></i> Close Video
                     </button>
