@@ -779,11 +779,58 @@ function copySummaryText(btn, id) {
 function resolveAssetUrl(rel) {
   if (!rel) return '';
   if (rel.startsWith('http://') || rel.startsWith('https://') || rel.startsWith('data:')) return rel;
-  if (rel.startsWith('/')) return rel;
-  const base = location.pathname.endsWith('/')
-    ? location.pathname
-    : location.pathname.substring(0, location.pathname.lastIndexOf('/') + 1);
-  return base + rel;
+  
+  const cleanRel = rel.replace(/^\/+/, '');
+  
+  // If hosted under /wise-ai-daily (GitHub Pages)
+  if (typeof location !== 'undefined' && location.pathname && location.pathname.includes('/wise-ai-daily')) {
+    return `/wise-ai-daily/${cleanRel}`;
+  }
+  
+  return `./${cleanRel}`;
+}
+
+function getPhaseSnapshotUrl(p, youtubeId, idx = 0) {
+  if (!youtubeId) return p?.snapshotUrl ? resolveAssetUrl(p.snapshotUrl) : null;
+  
+  const sec = (typeof p?.seconds === 'number') ? p.seconds : 0;
+  
+  // Exact mapping for known tutorial videos with curated snapshots
+  if (youtubeId === 'PEEBZwGetyc') {
+    if (sec < 60) return resolveAssetUrl('snapshots/PEEBZwGetyc/snap_0.jpg');
+    if (sec < 140) return resolveAssetUrl('snapshots/PEEBZwGetyc/snap_100.jpg');
+    if (sec < 250) return resolveAssetUrl('snapshots/PEEBZwGetyc/snap_170.jpg');
+    if (sec < 400) return resolveAssetUrl('snapshots/PEEBZwGetyc/snap_345.jpg');
+    if (sec < 550) return resolveAssetUrl('snapshots/PEEBZwGetyc/snap_460.jpg');
+    return resolveAssetUrl('snapshots/PEEBZwGetyc/snap_660.jpg');
+  }
+  
+  if (youtubeId === 'Qsi9MeLh95Q') {
+    if (sec < 100) return resolveAssetUrl('snapshots/Qsi9MeLh95Q/snap_65.jpg');
+    if (sec < 200) return resolveAssetUrl('snapshots/Qsi9MeLh95Q/snap_170.jpg');
+    if (sec < 300) return resolveAssetUrl('snapshots/Qsi9MeLh95Q/snap_240.jpg');
+    if (sec < 450) return resolveAssetUrl('snapshots/Qsi9MeLh95Q/snap_360.jpg');
+    return resolveAssetUrl('snapshots/Qsi9MeLh95Q/snap_526.jpg');
+  }
+  
+  if (youtubeId === 'vwLVjHEGGK0') {
+    if (sec < 500) return resolveAssetUrl('snapshots/vwLVjHEGGK0/snap_156.jpg');
+    if (sec < 2000) return resolveAssetUrl('snapshots/vwLVjHEGGK0/snap_689.jpg');
+    return resolveAssetUrl('snapshots/vwLVjHEGGK0/snap_3011.jpg');
+  }
+
+  if (p && p.snapshotUrl && !p.snapshotUrl.includes('undefined')) {
+    return resolveAssetUrl(p.snapshotUrl);
+  }
+
+  // Check if a direct file was named snap_${sec}.jpg
+  if (sec !== undefined) {
+    return resolveAssetUrl(`snapshots/${youtubeId}/snap_${sec}.jpg`);
+  }
+  
+  // For other videos without local snapshots, use YouTube scene frame snapshots (1.jpg, 2.jpg, 3.jpg)
+  const frameNum = (idx % 3) + 1;
+  return `https://img.youtube.com/vi/${youtubeId}/${frameNum}.jpg`;
 }
 
 function toggleAllSnapshots(cardId) {
@@ -885,10 +932,11 @@ function normalizeSummaryOutput(raw, parsed, cleanTitle, videoAuthor, url) {
       }
     }
     const finalSec = sec !== undefined ? sec : 0;
+    const yId = (parsed.platform === 'youtube' && parsed.id) ? parsed.id : null;
     return {
       ...p,
       seconds: finalSec,
-      snapshotUrl: p.snapshotUrl || (parsed.platform === 'youtube' && parsed.id ? `snapshots/${parsed.id}/snap_${finalSec}.jpg` : null)
+      snapshotUrl: getPhaseSnapshotUrl({ ...p, seconds: finalSec }, yId, idx)
     };
   });
 
@@ -1369,9 +1417,9 @@ function renderSummaryCard(r, id = null, opts = {}) {
         const jumpHref = (r.platform === 'youtube' && youtubeId && p.seconds !== undefined) 
           ? `https://youtu.be/${youtubeId}?t=${p.seconds}` 
           : (r.url ? `${r.url}&t=${p.seconds}s` : '#');
-        const snapshotImg = p.snapshotUrl 
-          ? resolveAssetUrl(p.snapshotUrl) 
-          : (youtubeId && p.seconds !== undefined ? resolveAssetUrl(`snapshots/${youtubeId}/snap_${p.seconds}.jpg`) : null);
+        const snapshotImg = getPhaseSnapshotUrl(p, youtubeId, idx);
+        const fallbackFrameUrl = youtubeId ? `https://img.youtube.com/vi/${youtubeId}/${(idx % 3) + 1}.jpg` : '';
+        const displayImg = snapshotImg || fallbackFrameUrl;
 
         return `<div class="phase-card">
           <div class="phase-header">
@@ -1400,11 +1448,9 @@ function renderSummaryCard(r, id = null, opts = {}) {
                 </div>
               ` : `
                 <div class="snapshot-media-wrapper">
-                  ${snapshotImg ? `
-                    <img src="${snapshotImg}" alt="${p.title}" class="snapshot-img" loading="lazy" onerror="this.onerror=null;this.src='https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg'" onclick="openLightbox('${snapshotImg}', '${(p.title || '').replace(/'/g, "\\'")}')" />
-                  ` : (youtubeId ? `
-                    <img src="https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg" alt="${p.title}" class="snapshot-img" loading="lazy" />
-                  ` : '')}
+                  ${displayImg ? `
+                    <img src="${displayImg}" alt="${p.title}" class="snapshot-img" loading="lazy" onerror="this.onerror=null;this.src='${fallbackFrameUrl}'" onclick="openLightbox('${displayImg}', '${(p.title || '').replace(/'/g, "\\'")}')" />
+                  ` : ''}
                   <div class="snapshot-overlay">
                     <span class="snapshot-badge"><i class="ti ti-clock"></i> ${timeRange}</span>
                     <div style="display:flex;gap:6px">
@@ -1413,8 +1459,8 @@ function renderSummaryCard(r, id = null, opts = {}) {
                           <i class="ti ti-player-play"></i> Play Moment
                         </button>
                       ` : ''}
-                      ${snapshotImg ? `
-                        <button class="snapshot-action-btn" onclick="openLightbox('${snapshotImg}', '${(p.title || '').replace(/'/g, "\\'")}')" title="Zoom snapshot">
+                      ${displayImg ? `
+                        <button class="snapshot-action-btn" onclick="openLightbox('${displayImg}', '${(p.title || '').replace(/'/g, "\\'")}')" title="Zoom snapshot">
                           <i class="ti ti-zoom-in"></i> Zoom
                         </button>
                       ` : ''}
