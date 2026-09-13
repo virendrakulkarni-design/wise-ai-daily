@@ -132,6 +132,7 @@ async function loadModels(key) {
 }
 
 // ── Init ─────────────────────────────────────────────────────────
+// ── Init ─────────────────────────────────────────────────────────
 async function init() {
   S.apiKey       = sg('groq-api-key') || '';
   S.following    = sg('ai-following') || [];
@@ -140,46 +141,70 @@ async function init() {
 
   const seedVipassana = {
     id: 'sum-seed-vipassana',
+    canonicalKey: 'youtube:vwLVjHEGGK0',
     title: 'Guided Vipassana Meditation — 1 Hour S.N. Goenka Session',
     platform: 'youtube',
     type: 'Video',
     url: 'https://www.youtube.com/watch?v=vwLVjHEGGK0',
-    source: 'S.N. Goenka / Virendra Kulkarni',
+    source: 'S.N. Goenka / Vipassana Research Institute',
     duration: '1:02:48',
     date: TODAY,
     createdAt: new Date().toISOString(),
-    overview: 'A complete 1-hour guided Vipassana meditation session led by S.N. Goenka Guruji for experienced students. Emphasizes developing Equanimity (Samata) and experiential wisdom (Panna) through observing bodily sensations without craving or aversion.',
-    points: [
+    overview: 'This video features a guided **Vipassana meditation** session led by *S.N. Goenka*, specifically designed for experienced students who have already completed a 10-day course. The session emphasizes cultivating **Equanimity** (*Samata*) and wisdom (*Panna*) through observing bodily sensations without reacting.',
+    takeaways: [
+      'Observe every bodily sensation objectively without craving (Raga) or aversion (Dosa).',
+      'Realize experientially the Law of Impermanence (Anicca)—every sensation arises only to pass away.',
+      'Maintain continuous awareness and unwavering mental balance (Samata) during long sittings (Adhitthana).',
+      'Conclude practice by radiating peaceful loving-kindness and sharing merits through Mangal Maitri.'
+    ],
+    phases: [
       {
-        timestamp: "2:36",
+        title: 'Anapana (Breath Awareness)',
+        timeRange: '2:36 - 10:35',
+        timestamp: '2:36',
         seconds: 156,
-        text: "Anapana (Breath Awareness): Focus attention on the natural, incoming and outgoing breath at the entrance of the nostrils to calm the mind, sharpen concentration, and develop Samadhi."
+        summary: 'The session begins by observing the natural flow of the breath at the entrance of the nostrils to calm and focus the mind.',
+        subPoints: [
+          'Observe natural respiration: incoming breath, outgoing breath—as it is, without artificial regulation or deep breathing.',
+          'Fix attention exclusively on the small triangular area from the nostrils down to the upper lip.',
+          'Cultivate sharp, one-pointed concentration (Samadhi) to prepare the mind for subtle bodily investigation.'
+        ]
       },
       {
-        timestamp: "11:29",
+        title: 'Vipassana Technique (Head-to-Toe Body Scan)',
+        timeRange: '11:29 - 50:11',
+        timestamp: '11:29',
         seconds: 689,
-        text: "Vipassana Technique (Head-to-Toe Body Scan): Systematically scan bodily sensations from the top of the head to the tips of the toes. Observe sensations objectively—whether gross, subtle, heavy, or tingling."
+        summary: 'The core practice involves scanning the body from the top of the head to the tips of the toes and back again. The goal is to observe sensations objectively, understanding the Law of Impermanence (Anicca).',
+        subPoints: [
+          'Equanimity (Samata): Avoid reacting with craving when experiencing pleasant sensations or aversion when feeling unpleasant sensations.',
+          'Sankhara Eradication: Sittings of strong determination (Adhitthana). By remaining balanced in the face of physical discomfort, unconscious habit patterns of misery are dissolved at their root.',
+          'Objective Observation: Sensations may be heavy, heat, itching, tingling, or subtle vibrations—observe them like a scientist with detached awareness.'
+        ]
       },
       {
-        timestamp: "16:10",
-        seconds: 970,
-        text: "Cultivating Equanimity (Samata & Anicca): Maintain absolute mental balance without reacting to sensations. Avoid craving (Raga) pleasant sensations or aversion (Dosa) toward pain, understanding that all sensations arise and pass away (Anicca)."
-      },
-      {
-        timestamp: "38:33",
-        seconds: 2313,
-        text: "Deep Sankhara Eradication: Sittings of strong determination (Adhitthana). Transforming intense bodily discomfort into opportunities to break deep-seated patterns of aversion and unconscious reactivity."
-      },
-      {
-        timestamp: "54:06",
+        title: 'Mangal Maitri (Metta Meditation)',
+        timeRange: '54:06 - 1:02:48',
+        timestamp: '54:06',
         seconds: 3246,
-        text: "Mangal Maitri (Metta Meditation): Concluding practice of radiating loving-kindness and compassion to all living beings, wishing universal peace, harmony, and liberation (Bhavatu Sabba Mangalam)."
+        summary: 'The session concludes with the practice of loving-kindness (Metta) and goodwill towards all living beings.',
+        subPoints: [
+          'Radiate the peaceful, harmonious vibrations generated during the sitting to all surrounding beings.',
+          'Chant and affirm universal well-being: Bhavatu Sabba Mangalam (May all beings be peaceful, happy, and liberated).',
+          'Close the meditation with forgiveness, shared joy, and deep mental purification.'
+        ]
       }
+    ],
+    points: [
+      { timestamp: "2:36", seconds: 156, text: "Anapana (2:36 - 10:35): Natural breath awareness at the entrance of the nostrils to calm the mind and establish Samadhi." },
+      { timestamp: "11:29", seconds: 689, text: "Vipassana Technique (11:29 - 50:11): Systematic head-to-toe body scan cultivating Equanimity (Samata) and realizing Impermanence (Anicca)." },
+      { timestamp: "54:06", seconds: 3246, text: "Mangal Maitri (54:06 - 1:02:48): Concluding Metta meditation radiating loving-kindness and universal peace (Bhavatu Sabba Mangalam)." }
     ]
   };
 
   const seedAiVideo = {
     id: 'sum-seed-aivideo',
+    canonicalKey: 'youtube:Qsi9MeLh95Q',
     title: 'RIP Paid Tools: Make LONG AI Videos With Consistency!',
     platform: 'youtube',
     type: 'Video',
@@ -188,23 +213,111 @@ async function init() {
     duration: '11:51',
     date: TODAY,
     createdAt: new Date().toISOString(),
-    overview: 'A zero-cost, fully automated production pipeline for long-form cinematic AI narrative videos with consistent character design using free tools and browser extensions.',
+    overview: 'This video provides a **fully automated, zero-cost blueprint** for creating high-quality, long-form AI videos with consistent character designs. The creator emphasizes moving away from paid tools by utilizing a specific workflow of free platforms.',
+    takeaways: [
+      'Lock facial geometry upfront with anchor character portraits to eliminate character face drift across scenes.',
+      'Automate prompt expansion, batch image rendering, and frame animation using free Chrome extensions.',
+      'Eliminate monthly software costs by chaining Google Gemini, Google Flow, Meta AI, and Google Vids.'
+    ],
+    phases: [
+      {
+        title: 'The Problem & The Blueprint',
+        timeRange: '0:00 - 1:05',
+        timestamp: '0:00',
+        seconds: 0,
+        summary: 'Why AI video channels fail due to face mutations, broken storylines, and paywalls, and how this zero-cost automation pipeline fixes it.',
+        subPoints: [
+          'Paywalls like Grok and Midjourney make long-form video production unsustainable on a budget.',
+          'Character facial inconsistency across scenes is the number one reason audience retention drops.'
+        ]
+      },
+      {
+        title: 'Story & Prompt Generation',
+        timeRange: '1:05 - 2:08',
+        timestamp: '1:05',
+        seconds: 65,
+        summary: 'Uses Google Gemini to generate the complete narrative story structure and detailed visual prompts based on master templates.',
+        subPoints: [
+          'Master prompt breaks down the plot into chronological scene-by-scene script beats.',
+          'Generates 18+ detailed visual prompts maintaining consistent environment descriptions.'
+        ]
+      },
+      {
+        title: 'Character Consistency',
+        timeRange: '2:50 - 3:55',
+        timestamp: '2:50',
+        seconds: 170,
+        summary: 'Generates anchor character images using Google Flow to ensure faces remain consistent throughout the project.',
+        subPoints: [
+          'Generates 16:9 high-resolution anchor character portraits with fixed facial geometry.',
+          'Locks facial features, lighting, and wardrobe to prevent visual drift in downstream rendering.'
+        ]
+      },
+      {
+        title: 'Mass Image Generation',
+        timeRange: '4:00 - 5:50',
+        timestamp: '4:00',
+        seconds: 240,
+        summary: 'Utilizes the Autoflow Chrome extension to automate the batch creation of consistent images.',
+        subPoints: [
+          'Feeds anchor portraits and scene prompts directly into Autoflow for non-stop batch generation.',
+          'Automatically downloads rendered scene frames into designated project directories.'
+        ]
+      },
+      {
+        title: 'Animation Automation',
+        timeRange: '6:00 - 8:46',
+        timestamp: '6:00',
+        seconds: 360,
+        summary: 'Employs Meta AI combined with the Meta Automation extension to animate static images into video clips.',
+        subPoints: [
+          'Injects customized camera motion prompts (pan, tilt, zoom, dolly) for cinematic feel.',
+          'Runs unattended batch frame-to-video rendering with zero watermarks.'
+        ]
+      },
+      {
+        title: 'Voiceover & Soundtrack',
+        timeRange: '9:10 - 10:48',
+        timestamp: '9:10',
+        seconds: 550,
+        summary: 'Integrates Google AI Studio (Gemini 2.5 Pro single speaker audio) and Gemini audio prompts for royalty-free background audio.',
+        subPoints: [
+          'Studio-grade expressive narration generated with natural cadence and tone.',
+          'AI-composed atmospheric soundscapes synchronized to video emotional arc.'
+        ]
+      },
+      {
+        title: 'Bonus High-Motion Safety Net',
+        timeRange: '10:50 - 11:51',
+        timestamp: '10:50',
+        seconds: 650,
+        summary: 'Leverages Google Vids (Veo 3.1) for high-complexity action sequences with zero cost.',
+        subPoints: [
+          '10-12 free daily generations for complex physics action shots where simple motion models struggle.',
+          'Seamless final export and assembly in any standard timeline editor.'
+        ]
+      }
+    ],
     points: [
-      { timestamp: "0:00", seconds: 0, text: "The Problem: Why AI channels fail due to face mutations and Grok paywalls, and how this zero-cost automation pipeline fixes it." },
-      { timestamp: "1:05", seconds: 65, text: "Story & Visual Prompts: Google Gemini with structured master prompts generates complete cinematic story and 18+ chronological scene prompts." },
-      { timestamp: "2:50", seconds: 170, text: "Character Consistency: Generate 16:9 anchor character portraits in Google Flow to lock face geometry and prevent drift." },
-      { timestamp: "4:00", seconds: 240, text: "Automated Batch Generation: Auto Flow Chrome extension maps anchor characters to prompts and auto-downloads all rendered frames." },
-      { timestamp: "6:00", seconds: 360, text: "Full Animation Automation: Meta AI + Meta Automation extension for automated frame-to-video rendering with camera motion prompts." },
-      { timestamp: "9:10", seconds: 550, text: "Voiceover & Soundtrack: Google AI Studio (Gemini 2.5 Pro Single Speaker voice model) for studio audio, and Gemini for synced music." },
-      { timestamp: "10:50", seconds: 650, text: "Bonus High-Motion Safety Net: Google Vids (Veo 3.1 model) provides 10-12 free daily generations for complex physics action shots." }
+      { timestamp: "0:00", seconds: 0, text: "The Problem (0:00 - 1:05): Overcoming face mutations and paid tool paywalls." },
+      { timestamp: "1:05", seconds: 65, text: "Story & Prompt Generation (1:05 - 2:08): Google Gemini structured story and prompt breakdown." },
+      { timestamp: "2:50", seconds: 170, text: "Character Consistency (2:50 - 3:55): Google Flow anchor character generation." },
+      { timestamp: "4:00", seconds: 240, text: "Mass Image Generation (4:00 - 5:50): Autoflow Chrome extension automated batch rendering." },
+      { timestamp: "6:00", seconds: 360, text: "Animation (6:00 - 8:46): Meta AI + Meta Automation extension for camera motion." },
+      { timestamp: "9:10", seconds: 550, text: "Voiceover & Soundtrack (9:10 - 10:48): Google AI Studio voice generation." },
+      { timestamp: "10:50", seconds: 650, text: "Bonus High-Motion Safety Net (10:50 - 11:51): Google Vids Veo 3.1 for complex physics." }
     ]
   };
 
-  // Seed sample summaries if not present
-  const hasVipassana = S.urlSummaries.some(s => (s.url||'').includes('vwLVjHEGGK0'));
-  const hasAiVideo = S.urlSummaries.some(s => (s.url||'').includes('Qsi9MeLh95Q'));
-  if (!hasVipassana) S.urlSummaries.unshift(seedVipassana);
-  if (!hasAiVideo) S.urlSummaries.push(seedAiVideo);
+  // Register in persistent url-cache store
+  ss('url-cache:youtube:vwLVjHEGGK0', seedVipassana);
+  ss('url-cache:youtube:Qsi9MeLh95Q', seedAiVideo);
+
+  // Upgrade or seed S.urlSummaries with latest rich seeds
+  const otherSummaries = (S.urlSummaries || []).filter(s => 
+    !(s.url || '').includes('vwLVjHEGGK0') && !(s.url || '').includes('Qsi9MeLh95Q')
+  );
+  S.urlSummaries = [seedVipassana, seedAiVideo, ...otherSummaries];
   ss('ai-summaries', S.urlSummaries);
 
   refreshHistoryDates();
@@ -287,43 +400,244 @@ async function callGroq(prompt, maxTokens = 2048) {
   return JSON.parse(match[0]);
 }
 
-// ── URL parser ───────────────────────────────────────────────────
+// ── URL parser & Canonicalizer ──────────────────────────────────────
 function parseURL(raw) {
   try {
     const url = new URL(raw.trim());
-    const h = url.hostname.replace('www.', '');
+    const h = url.hostname.replace('www.', '').replace(/^m\./, '');
     if (h.includes('youtu.be') || h.includes('youtube.com')) {
       let id=null, type='Video';
       if (h==='youtu.be') id=url.pathname.slice(1).split('?')[0];
       else if (url.pathname.includes('/shorts/')) { id=url.pathname.split('/shorts/')[1].split('?')[0]; type='Short'; }
       else id=url.searchParams.get('v');
-      if (id) return { platform:'youtube', id, type, url:raw.trim() };
+      if (id) {
+        const parsed = { platform:'youtube', id, type, url:raw.trim() };
+        parsed.canonicalKey = `youtube:${id}`;
+        return parsed;
+      }
     }
     if (h.includes('instagram.com')) {
       const m=url.pathname.match(/\/(p|reel|tv)\/([A-Za-z0-9_-]+)/);
-      if (m) return { platform:'instagram', id:m[2], type:m[1]==='reel'?'Reel':'Post', url:raw.trim() };
+      if (m) {
+        const parsed = { platform:'instagram', id:m[2], type:m[1]==='reel'?'Reel':'Post', url:raw.trim() };
+        parsed.canonicalKey = `instagram:${m[2]}`;
+        return parsed;
+      }
     }
     if (h.includes('facebook.com') || h.includes('fb.watch')) {
-      // /share/v/SHORTCODE, /watch/?v=ID, /videos/ID, /reel/ID, fb.watch/X
       const shareMatch = url.pathname.match(/\/share\/(?:v|r)\/([A-Za-z0-9_-]+)/);
       const videoMatch = url.pathname.match(/\/(?:watch|videos|reel)\/(?:[^/]+\/)?([A-Za-z0-9_-]+)/);
       const qv = url.searchParams.get('v');
       const id = shareMatch?.[1] || videoMatch?.[1] || qv || url.pathname.split('/').filter(Boolean).pop();
       const type = url.pathname.includes('/reel/') ? 'Reel' : 'Video';
-      if (id) return { platform:'facebook', id, type, url:raw.trim() };
+      if (id) {
+        const parsed = { platform:'facebook', id, type, url:raw.trim() };
+        parsed.canonicalKey = `facebook:${id}`;
+        return parsed;
+      }
     }
     if (h.includes('twitter.com')||h.includes('x.com')) {
       const m=url.pathname.match(/\/status\/(\d+)/);
-      if (m) return { platform:'twitter', id:m[1], type:'Post', url:raw.trim() };
+      if (m) {
+        const parsed = { platform:'twitter', id:m[1], type:'Post', url:raw.trim() };
+        parsed.canonicalKey = `twitter:${m[1]}`;
+        return parsed;
+      }
     }
     if (h.includes('github.com')) {
       const parts=url.pathname.split('/').filter(Boolean);
-      if (parts.length>=2) return { platform:'github', id:parts.slice(0,2).join('/'), type:'Repo', url:raw.trim() };
+      if (parts.length>=2) {
+        const repoId = parts.slice(0,2).join('/');
+        const parsed = { platform:'github', id:repoId, type:'Repo', url:raw.trim() };
+        parsed.canonicalKey = `github:${repoId.toLowerCase()}`;
+        return parsed;
+      }
     }
-    return { platform:'web', id:h, type:'Article', url:raw.trim() };
+    const cleanWebUrl = `${url.origin}${url.pathname}`.toLowerCase().replace(/\/+$/, '');
+    return { platform:'web', id:h, type:'Article', url:raw.trim(), canonicalKey:`web:${cleanWebUrl}` };
   } catch {}
   return null;
 }
+
+function getCanonicalKey(parsed) {
+  if (!parsed) return null;
+  if (parsed.canonicalKey) return parsed.canonicalKey;
+  if (parsed.platform && parsed.id) return `${parsed.platform}:${parsed.id}`;
+  return parsed.url ? parsed.url.trim().toLowerCase() : null;
+}
+
+function renderMarkdown(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>');
+}
+
+// ── Persistent Deterministic Cache Helpers ─────────────────────────
+function findCachedSummary(parsed) {
+  if (!parsed) return null;
+  const canonicalKey = getCanonicalKey(parsed);
+
+  // 1. Direct match from persistent url-cache
+  if (canonicalKey) {
+    const direct = sg('url-cache:' + canonicalKey);
+    if (direct) return direct;
+  }
+
+  // 2. Search in S.urlSummaries
+  if (Array.isArray(S.urlSummaries)) {
+    const found = S.urlSummaries.find(s => {
+      if (s.canonicalKey && canonicalKey && s.canonicalKey === canonicalKey) return true;
+      if (parsed.id && (s.url || '').includes(parsed.id)) return true;
+      if (s.url && parsed.url && s.url.trim().toLowerCase() === parsed.url.trim().toLowerCase()) return true;
+      return false;
+    });
+    if (found) return found;
+  }
+
+  return null;
+}
+
+function saveSummaryToCache(summary) {
+  if (!summary) return;
+  const parsed = parseURL(summary.url);
+  const canonicalKey = summary.canonicalKey || (parsed ? getCanonicalKey(parsed) : null);
+  if (canonicalKey) {
+    summary.canonicalKey = canonicalKey;
+    ss('url-cache:' + canonicalKey, summary);
+  }
+  const existingIdx = (S.urlSummaries || []).findIndex(s =>
+    (s.canonicalKey && canonicalKey && s.canonicalKey === canonicalKey) ||
+    (s.id && s.id === summary.id) ||
+    (parsed?.id && (s.url || '').includes(parsed.id))
+  );
+  if (existingIdx >= 0) {
+    S.urlSummaries[existingIdx] = summary;
+  } else {
+    S.urlSummaries.unshift(summary);
+  }
+  S.urlSummaries = S.urlSummaries.slice(0, 100);
+  ss('ai-summaries', S.urlSummaries);
+}
+
+function formatSummaryAsMarkdown(s) {
+  if (!s) return '';
+  let md = `# ${s.title || 'Summary'}\n\n`;
+  if (s.overview) {
+    md += `${s.overview}\n\n`;
+  }
+  if (Array.isArray(s.phases) && s.phases.length > 0) {
+    md += `### **Key Phases & Workflow:**\n\n`;
+    s.phases.forEach(p => {
+      const timeStr = p.timeRange ? ` (${p.timeRange})` : (p.timestamp ? ` (${p.timestamp})` : '');
+      md += `* **${p.title || 'Phase'}${timeStr}:** ${p.summary || ''}\n`;
+      if (Array.isArray(p.subPoints) && p.subPoints.length > 0) {
+        p.subPoints.forEach(sp => {
+          md += `    * ${sp}\n`;
+        });
+      }
+    });
+    md += `\n`;
+  } else if (Array.isArray(s.points) && s.points.length > 0) {
+    md += `### **Key Points:**\n\n`;
+    s.points.forEach(p => {
+      const txt = typeof p === 'string' ? p : (p.timestamp ? `**[${p.timestamp}]** ${p.text}` : p.text || '');
+      md += `* ${txt}\n`;
+    });
+    md += `\n`;
+  }
+  if (Array.isArray(s.takeaways) && s.takeaways.length > 0) {
+    md += `### **Key Takeaways:**\n\n`;
+    s.takeaways.forEach(t => {
+      md += `* ${t}\n`;
+    });
+    md += `\n`;
+  }
+  if (s.url) {
+    md += `*Source:* ${s.url}\n`;
+  }
+  return md.trim();
+}
+
+function copySummaryText(btn, id) {
+  let item = S.urlResult?.id === id ? S.urlResult : (S.urlSummaries || []).find(s => s.id === id);
+  if (!item && S.urlResult) item = S.urlResult;
+  if (!item) return;
+  const md = formatSummaryAsMarkdown(item);
+  const markCopied = () => {
+    const orig = btn.innerHTML;
+    btn.innerHTML = '<i class="ti ti-check"></i> Copied!';
+    setTimeout(() => { btn.innerHTML = orig; }, 2000);
+  };
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(md).then(markCopied).catch(() => {
+      const ta = document.createElement('textarea');
+      ta.value = md;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      markCopied();
+    });
+  } else {
+    const ta = document.createElement('textarea');
+    ta.value = md;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    markCopied();
+  }
+}
+
+function normalizeSummaryOutput(raw, parsed, cleanTitle, videoAuthor, url) {
+  const res = { ...raw };
+  if (cleanTitle && (!res.title || res.title === 'Video Summary' || res.title === 'Page Summary')) {
+    res.title = cleanTitle;
+  }
+  if (videoAuthor && (!res.source || res.source === 'Creator' || res.source === 'Author')) {
+    res.source = videoAuthor;
+  }
+  res.url = url;
+  res.platform = parsed.platform;
+  res.type = parsed.type;
+  res.date = res.date || TODAY;
+  res.createdAt = res.createdAt || new Date().toISOString();
+  res.id = res.id || ('sum-' + Date.now());
+
+  // Ensure phases array
+  if (!Array.isArray(res.phases)) res.phases = [];
+
+  // Filter out any placeholder texts from phases
+  const placeholderRegex = /^(opening context|first main point|second main point|third main point|closing takeaway|insight \d|hook|phase name)/i;
+  res.phases = res.phases.filter(p => {
+    const t = (p.title || '').trim();
+    const s = (p.summary || '').trim();
+    return !placeholderRegex.test(t) && !placeholderRegex.test(s);
+  });
+
+  // Ensure points array exists for backwards compatibility
+  if (!Array.isArray(res.points) || res.points.length === 0) {
+    if (res.phases.length > 0) {
+      res.points = res.phases.map(p => ({
+        timestamp: p.timestamp || '0:00',
+        seconds: p.seconds || 0,
+        text: `${p.title ? p.title + ': ' : ''}${p.summary || ''}`
+      }));
+    } else {
+      res.points = [];
+    }
+  }
+
+  // Ensure takeaways array
+  if (!Array.isArray(res.takeaways)) res.takeaways = [];
+
+  return res;
+}
+
 
 // ── Daily digest ─────────────────────────────────────────────────
 async function fetchDigest() {
@@ -405,13 +719,30 @@ async function pasteAndSummarize() {
   }
 }
 
-// ── Summarise URL ────────────────────────────────────────────────
-async function summarizeURL() {
+// ── Summarise URL (Deterministic with Persistent Caching) ──────────
+async function summarizeURL(forceRefresh = false) {
   if (!S.apiKey) { S.showSetup=true; render(); return; }
   const url = S.urlInput.trim();
   if (!url) { S.urlError='Enter a URL first.'; render(); return; }
   const parsed = parseURL(url);
   if (!parsed) { S.urlError="Doesn't look like a valid URL."; render(); return; }
+
+  const canonicalKey = getCanonicalKey(parsed);
+
+  // 1. Check persistent cache FIRST (guarantees identical output on repeated clicks)
+  if (!forceRefresh) {
+    const cached = findCachedSummary(parsed);
+    if (cached) {
+      S.urlError = '';
+      S.urlLoading = false;
+      const cachedResult = { ...cached, isCached: true };
+      S.urlResult = cachedResult;
+      saveSummaryToCache(cachedResult);
+      render();
+      return;
+    }
+  }
+
   S.urlLoading=true; S.urlError=''; S.urlResult=null; render();
 
   // Fetch metadata via noembed for accurate title & author
@@ -432,21 +763,27 @@ async function summarizeURL() {
   const videoAuthor = videoMeta?.author_name || '';
 
   const prompt = isVideo
-    ? `You are an expert video analyst summarizing this ${parsed.platform} video:
+    ? `You are an elite video analyst and instructional summarizer analyzing this ${parsed.platform} video:
 URL: ${url}
 Title: "${cleanTitle || 'Video'}"
 ${videoAuthor ? `Creator / Channel: "${videoAuthor}"` : ''}
 
-TASK:
-Analyze this video in detail based on its subject matter ("${cleanTitle}").
-- If this is a meditation session (e.g., Vipassana, Mindfulness, Pranayama, Yoga), detail the exact classical phases (e.g., Anapana breath awareness, systematic body scanning, developing Equanimity towards sensations and knowing Anicca/impermanence, and concluding Mangal Maitri / Metta meditation) with realistic timestamps.
-- If this is a tutorial, AI workflow, lecture, or workout, break down the exact step-by-step methodologies, tools, and takeaways.
+GOAL: Produce an authoritative, deep, and structured summary that reads like expert notes.
 
-STRICT INSTRUCTIONS:
-1. Provide 4 to 6 chronological milestones across the video with realistic timestamps (e.g., 0:00, 2:30, 11:15, 38:00, 54:00).
-2. For EVERY milestone, write a rich, substantive explanation (2-3 detailed sentences) explaining what is taught, practiced, or demonstrated.
-3. FORBIDDEN: NEVER output placeholder text like "opening context", "first main point", "second main point", "third main point", "hook", or "takeaway". Every point must contain real, specific, rich knowledge.
-4. Include a concise 2-3 sentence overview explaining the core purpose and technique of the video.
+CRITICAL CONTENT GUIDELINES:
+1. Executive Overview: 2-3 detailed sentences explaining what this video is, who is leading/presenting it, who it is for, and its primary technique, thesis, or goal.
+2. Chronological Milestones / Key Phases: 4 to 6 major chronological phases across the video.
+   - For EVERY phase provide:
+     * "title": A clear, descriptive name of the phase/chapter (e.g. "Anapana (Breath Awareness)", "Story & Prompt Generation", "Core Circuit Workout", "Model Architecture").
+     * "timeRange": A realistic time range in format "M:SS - M:SS" or "H:MM:SS - H:MM:SS" (e.g. "2:36 - 10:35").
+     * "timestamp": Start timestamp (e.g. "2:36").
+     * "seconds": Start in total seconds (e.g. 156).
+     * "summary": 1-2 detailed sentences summarizing what happens in this phase.
+     * "subPoints": An array of 2-3 specific, actionable details, techniques, terminology, tools, or tips taught in this phase.
+3. Key Takeaways: 3-4 bulleted core principles, rules of thumb, or key lessons.
+4. STRICT FORBIDDEN LIST:
+   - NEVER use placeholder text: "opening context", "first main point", "second main point", "hook", "insight 1", "key takeaway", "closing thoughts".
+   - NEVER write vague or empty sentences. Every single point must contain real domain concepts, instructions, or insights.
 
 Return ONLY valid JSON (no markdown fences, no extra text):
 {
@@ -455,25 +792,39 @@ Return ONLY valid JSON (no markdown fences, no extra text):
   "type": "${parsed.type}",
   "url": "${url}",
   "source": "${(videoAuthor || 'Creator').replace(/"/g, '\\"')}",
-  "duration": "estimated duration e.g. 10:00 or 1:00:00",
+  "duration": "estimated duration e.g. 15:00 or 1:02:48",
   "overview": "2-3 sentence executive overview of what this video teaches and who it is for",
-  "points": [
+  "takeaways": [
+    "Core principle or insight 1",
+    "Core principle or insight 2",
+    "Core principle or insight 3"
+  ],
+  "phases": [
     {
+      "title": "Phase Name",
+      "timeRange": "0:00 - 3:15",
       "timestamp": "0:00",
       "seconds": 0,
-      "text": "Detailed explanation of opening phase and technique..."
+      "summary": "Detailed summary of what happens in this phase...",
+      "subPoints": [
+        "Specific actionable detail or technique A",
+        "Specific actionable detail or technique B"
+      ]
     }
   ]
 }`
-    : `Summarize the content at this ${parsed.platform} URL: ${url}
+    : `You are an expert research analyst summarizing this ${parsed.platform} publication:
+URL: ${url}
 Title: "${cleanTitle || 'Page'}"
 ${videoAuthor ? `Author/Source: "${videoAuthor}"` : ''}
 
-STRICT INSTRUCTIONS:
-1. Provide 4 to 6 highly informative, specific takeaways.
-2. NEVER output generic placeholder text like "insight 1" or "main point".
+GOAL: Produce an authoritative, comprehensive summary.
+1. Executive Overview: 2-3 sentences explaining the background, main thesis, and significance.
+2. Key Sections / Topics: 4 to 6 detailed sections, each with a title, summary, and 2-3 specific sub-points.
+3. Key Takeaways: 3-4 actionable insights or conclusions.
+4. FORBIDDEN: Do not use placeholders or generic phrases.
 
-Return ONLY valid JSON:
+Return ONLY valid JSON (no markdown fences, no extra text):
 {
   "title": "${(cleanTitle || 'Page Summary').replace(/"/g, '\\"')}",
   "platform": "${parsed.platform}",
@@ -481,41 +832,31 @@ Return ONLY valid JSON:
   "url": "${url}",
   "source": "${(videoAuthor || 'Author').replace(/"/g, '\\"')}",
   "overview": "2-3 sentence executive overview of the page content.",
-  "points": ["Specific insight 1", "Specific insight 2", "Specific insight 3", "Specific insight 4"]
+  "takeaways": [
+    "Actionable takeaway 1",
+    "Actionable takeaway 2",
+    "Actionable takeaway 3"
+  ],
+  "phases": [
+    {
+      "title": "Section Title",
+      "summary": "Detailed section summary...",
+      "subPoints": [
+        "Specific detail 1",
+        "Specific detail 2"
+      ]
+    }
+  ]
 }`;
 
   try {
-    const rawResult = await callGroq(prompt);
-    if (cleanTitle && (!rawResult.title || rawResult.title.includes('inferred') || rawResult.title === 'Video Summary')) {
-      rawResult.title = cleanTitle;
-    }
-    if (videoAuthor && (!rawResult.source || rawResult.source.includes('likely') || rawResult.source === 'Creator')) {
-      rawResult.source = videoAuthor;
-    }
-    rawResult.url = url;
-    rawResult.platform = parsed.platform;
-    rawResult.type = parsed.type;
+    const rawResult = await callGroq(prompt, 3000);
+    const finalResult = normalizeSummaryOutput(rawResult, parsed, cleanTitle, videoAuthor, url);
+    finalResult.canonicalKey = canonicalKey;
+    finalResult.isCached = true;
+    saveSummaryToCache(finalResult);
 
-    // Sanitize any accidental placeholder text from LLM
-    const placeholderRegex = /^(opening context|first main point|second main point|third main point|closing takeaway|insight \d|hook)/i;
-    if (Array.isArray(rawResult.points)) {
-      rawResult.points = rawResult.points.filter(p => {
-        const text = (typeof p === 'string' ? p : p?.text || '').trim();
-        return !placeholderRegex.test(text);
-      });
-    }
-
-    S.urlResult = rawResult;
-
-    // Save to persistent URL summaries in localStorage
-    const summaryItem = {
-      id: 'sum-' + Date.now(),
-      createdAt: new Date().toISOString(),
-      date: TODAY,
-      ...rawResult,
-    };
-    S.urlSummaries = [summaryItem, ...(S.urlSummaries || []).filter(s => s.url !== url)].slice(0, 100);
-    ss('ai-summaries', S.urlSummaries);
+    S.urlResult = finalResult;
   } catch(e) {
     if (e.message==='NO_KEY') S.showSetup=true;
     else S.urlError = e.message;
@@ -633,9 +974,9 @@ function buildFeed() {
 }
 
 // ── Tab: Add URL ─────────────────────────────────────────────────
+// ── Tab: Add URL ─────────────────────────────────────────────────
 function buildAdd() {
-  const r=S.urlResult;
-  const isVideo=r&&['youtube','instagram','facebook'].includes(r.platform);
+  const r = S.urlResult;
   return `
     <!-- iPhone Shortcut card -->
     <div class="card" style="margin-bottom:14px;background:linear-gradient(135deg,rgba(108,63,197,0.12),rgba(168,85,247,0.08));border-color:rgba(108,63,197,0.3)">
@@ -679,64 +1020,127 @@ function buildAdd() {
       <input class="input-field" type="url" placeholder="Paste any URL here…"
         value="${S.urlInput}"
         oninput="S.urlInput=this.value;S.urlError=''"
-        onkeydown="if(event.key==='Enter')summarizeURL()" />
-      <button class="btn-primary" onclick="summarizeURL()" ${S.urlLoading||S.modelsLoading?'disabled':''}>
+        onkeydown="if(event.key==='Enter')summarizeURL(false)" />
+      <button class="btn-primary" onclick="summarizeURL(false)" ${S.urlLoading||S.modelsLoading?'disabled':''}>
         ${S.urlLoading?`<span class="pulse-dot"></span>`:`<i class="ti ti-sparkles"></i>`} Summarize
       </button>
     </div>
     ${S.urlError?`<div class="error-box"><i class="ti ti-alert-circle"></i> ${S.urlError}</div>`:''}
-    ${S.urlLoading?`<div class="loading-row"><span class="pulse-dot"></span> Analyzing…</div><div class="skeleton" style="height:160px"></div>`:''}
-    ${r&&!S.urlLoading?`<div class="card">
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center">
-        ${ptag(r.platform)}<span class="tag t-type">${r.type||''}</span>
-        ${r.source?`<span style="font-size:11px;color:var(--text-muted)">${r.source}</span>`:''}
-        ${r.duration?`<span style="font-size:11px;color:var(--text-muted)">${r.duration}</span>`:''}
-        <span style="font-size:11px;color:var(--text-success);margin-left:auto"><i class="ti ti-check"></i> Saved to History</span>
-      </div>
-      <div style="font-size:15px;font-weight:500;margin-bottom:12px;line-height:1.4">${r.title||'Summary'}</div>
-      ${r.overview ? `<div style="font-size:13px;color:var(--text-secondary);line-height:1.55;margin-bottom:14px;padding:9px 12px;background:var(--surface-1);border-radius:8px;border-left:3px solid var(--brand)">${r.overview}</div>` : ''}
-      ${isVideo&&r.points?r.points.map(p=>{
-        const href=r.platform==='youtube'?`${r.url}&t=${p.seconds}s`:r.url;
-        return `<div class="bullet"><a class="ts-link${r.platform!=='youtube'?' ts-approx':''}" href="${href}" target="_blank" rel="noopener">${p.timestamp}</a><span class="bullet-text">${p.text}</span></div>`;
-      }).join(''):''}
-      ${!isVideo&&r.points?r.points.map(p=>`<div class="bullet"><div class="bullet-dot"></div><span class="bullet-text">${p}</span></div>`).join(''):''}
-      <a href="${r.url}" target="_blank" rel="noopener" style="font-size:12px;color:var(--text-muted);margin-top:12px;display:inline-flex;align-items:center;gap:4px">
-        Open original <i class="ti ti-external-link" style="font-size:12px"></i>
-      </a>
-    </div>`:''}`;
+    ${S.urlLoading?`<div class="loading-row"><span class="pulse-dot"></span> Analyzing content deeply with ${S.activeModel || 'AI'}…</div><div class="skeleton" style="height:180px"></div>`:''}
+    ${r&&!S.urlLoading?renderSummaryCard(r, r.id, { isCurrentResult: true }):''}`;
 }
 
 // ── Summary Card Renderer ─────────────────────────────────────────
-function renderSummaryCard(r, id = null) {
+function renderSummaryCard(r, id = null, opts = {}) {
   if (!r) return '';
   const isVideo = ['youtube','instagram','facebook'].includes(r.platform);
-  const deleteBtn = id ? `
-    <button class="btn-ghost" style="padding:2px 7px;font-size:11px;margin-left:auto;color:var(--text-danger)" onclick="deleteSummary('${id}')" title="Delete summary">
+  const cardId = id || r.id || ('sum-' + Date.now());
+  const isCurrent = opts.isCurrentResult || false;
+
+  const deleteBtn = (id && !isCurrent) ? `
+    <button class="btn-ghost" style="padding:2px 7px;font-size:11px;color:var(--text-danger)" onclick="deleteSummary('${id}')" title="Delete summary">
       <i class="ti ti-trash"></i>
     </button>` : '';
 
-  return `<div class="card" style="margin-bottom:12px">
+  const rerunBtn = (isCurrent || r.url) ? `
+    <button class="btn-ghost" style="padding:2px 8px;font-size:11px" onclick="S.urlInput='${(r.url || '').replace(/'/g, "\\'")}';summarizeURL(true)" title="Force re-analyze with AI">
+      <i class="ti ti-refresh"></i> Re-analyze
+    </button>` : '';
+
+  const copyBtn = `
+    <button class="btn-ghost" style="padding:2px 8px;font-size:11px" onclick="copySummaryText(this, '${cardId}')" title="Copy full markdown summary">
+      <i class="ti ti-copy"></i> Copy
+    </button>`;
+
+  const hasPhases = Array.isArray(r.phases) && r.phases.length > 0;
+  const hasTakeaways = Array.isArray(r.takeaways) && r.takeaways.length > 0;
+
+  return `<div class="card" style="margin-bottom:14px">
+    <!-- Top badge bar -->
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
       ${ptag(r.platform)}
       <span class="tag t-type">${r.type || 'Summary'}</span>
       ${r.source ? `<span style="font-size:11px;color:var(--text-muted)">${r.source}</span>` : ''}
       ${r.duration ? `<span style="font-size:11px;color:var(--text-muted)">${r.duration}</span>` : ''}
-      ${r.date ? `<span style="font-size:11px;color:var(--text-muted)">${formatDateLabel(r.date)}</span>` : ''}
-      ${deleteBtn}
+      <span class="badge-cached"><i class="ti ti-check-double"></i> Saved Analysis</span>
+      ${r.date ? `<span style="font-size:11px;color:var(--text-muted);margin-left:auto">${formatDateLabel(r.date)}</span>` : ''}
     </div>
-    <a href="${r.url || '#'}" target="_blank" rel="noopener" class="card-title">
+
+    <!-- Title -->
+    <a href="${r.url || '#'}" target="_blank" rel="noopener" class="card-title" style="font-size:15px;font-weight:600;margin-bottom:12px;line-height:1.4">
       ${r.title || 'Summary'} <i class="ti ti-external-link" style="font-size:12px;color:var(--text-muted)"></i>
     </a>
-    ${r.overview ? `<div style="font-size:13px;color:var(--text-secondary);line-height:1.55;margin-bottom:14px;padding:9px 12px;background:var(--surface-1);border-radius:8px;border-left:3px solid var(--brand)">${r.overview}</div>` : ''}
-    ${isVideo && Array.isArray(r.points) && typeof r.points[0] === 'object' ? r.points.map(p => {
-      const href = r.platform === 'youtube' && p.seconds !== undefined ? `${r.url}&t=${p.seconds}s` : r.url;
-      return `<div class="bullet"><a class="ts-link${r.platform !== 'youtube' ? ' ts-approx' : ''}" href="${href}" target="_blank" rel="noopener">${p.timestamp || '0:00'}</a><span class="bullet-text">${p.text || ''}</span></div>`;
-    }).join('') : ''}
-    ${(!isVideo || !Array.isArray(r.points) || typeof r.points[0] !== 'object') && Array.isArray(r.points) ? r.points.map(p => {
-      const text = typeof p === 'string' ? p : (p.text || '');
-      return `<div class="bullet"><div class="bullet-dot"></div><span class="bullet-text">${text}</span></div>`;
-    }).join('') : ''}
-    ${r.url ? `<a href="${r.url}" target="_blank" rel="noopener" style="font-size:12px;color:var(--text-muted);margin-top:10px;display:inline-flex;align-items:center;gap:4px">Open original <i class="ti ti-external-link" style="font-size:12px"></i></a>` : ''}
+
+    <!-- Executive Overview -->
+    ${r.overview ? `
+      <div class="summary-overview">
+        <div class="overview-label"><i class="ti ti-sparkles"></i> Executive Overview</div>
+        <div class="overview-text">${renderMarkdown(r.overview)}</div>
+      </div>
+    ` : ''}
+
+    <!-- Rich Phases / Milestones -->
+    ${hasPhases ? `
+      <div class="phases-title"><i class="ti ti-timeline"></i> Key Phases & Workflow</div>
+      ${r.phases.map(p => {
+        const timeRange = p.timeRange || p.timestamp || '';
+        const jumpHref = (r.platform === 'youtube' && p.seconds !== undefined) ? `${r.url}&t=${p.seconds}s` : r.url;
+        return `<div class="phase-card">
+          <div class="phase-header">
+            ${timeRange ? `<a class="ts-pill" href="${jumpHref}" target="_blank" rel="noopener" title="Jump to timestamp in video"><i class="ti ti-player-play"></i> ${timeRange}</a>` : ''}
+            <span class="phase-name">${renderMarkdown(p.title || 'Phase')}</span>
+          </div>
+          ${p.summary ? `<div class="phase-summary">${renderMarkdown(p.summary)}</div>` : ''}
+          ${Array.isArray(p.subPoints) && p.subPoints.length ? `
+            <div class="sub-points-list">
+              ${p.subPoints.map(sp => `
+                <div class="sub-bullet-row">
+                  <i class="ti ti-corner-down-right"></i>
+                  <span>${renderMarkdown(sp)}</span>
+                </div>
+              `).join('')}
+            </div>
+          ` : ''}
+        </div>`;
+      }).join('')}
+    ` : ''}
+
+    <!-- Fallback for legacy points if no phases -->
+    ${!hasPhases && Array.isArray(r.points) && r.points.length ? `
+      <div class="phases-title"><i class="ti ti-list"></i> Highlights</div>
+      ${r.points.map(p => {
+        if (typeof p === 'object' && p !== null) {
+          const href = (r.platform === 'youtube' && p.seconds !== undefined) ? `${r.url}&t=${p.seconds}s` : r.url;
+          return `<div class="bullet">
+            <a class="ts-link${r.platform !== 'youtube' ? ' ts-approx' : ''}" href="${href}" target="_blank" rel="noopener">${p.timestamp || '0:00'}</a>
+            <span class="bullet-text">${renderMarkdown(p.text || '')}</span>
+          </div>`;
+        } else {
+          return `<div class="bullet"><div class="bullet-dot"></div><span class="bullet-text">${renderMarkdown(String(p))}</span></div>`;
+        }
+      }).join('')}
+    ` : ''}
+
+    <!-- Key Takeaways -->
+    ${hasTakeaways ? `
+      <div class="takeaways-card">
+        <div class="takeaways-title"><i class="ti ti-bulb"></i> Core Takeaways & Principles</div>
+        ${r.takeaways.map(t => `
+          <div class="takeaway-item">
+            <i class="ti ti-check"></i>
+            <span>${renderMarkdown(t)}</span>
+          </div>
+        `).join('')}
+      </div>
+    ` : ''}
+
+    <!-- Bottom Actions Toolbar -->
+    <div class="summary-actions">
+      ${copyBtn}
+      ${rerunBtn}
+      ${deleteBtn}
+      ${r.url ? `<a href="${r.url}" target="_blank" rel="noopener" style="font-size:12px;color:var(--text-muted);margin-left:auto;display:inline-flex;align-items:center;gap:4px">Open original <i class="ti ti-external-link" style="font-size:12px"></i></a>` : ''}
+    </div>
   </div>`;
 }
 
@@ -777,11 +1181,18 @@ function buildHistory() {
     if (!q) return true;
     const titleMatch = (s.title || '').toLowerCase().includes(q);
     const sourceMatch = (s.source || '').toLowerCase().includes(q);
+    const overviewMatch = (s.overview || '').toLowerCase().includes(q);
+    const takeawaysMatch = (s.takeaways || []).some(t => (t || '').toLowerCase().includes(q));
+    const phasesMatch = (s.phases || []).some(p =>
+      (p.title || '').toLowerCase().includes(q) ||
+      (p.summary || '').toLowerCase().includes(q) ||
+      (p.subPoints || []).some(sp => (sp || '').toLowerCase().includes(q))
+    );
     const pointsMatch = (s.points || []).some(p => {
       const txt = typeof p === 'string' ? p : (p.text || '');
       return txt.toLowerCase().includes(q);
     });
-    return titleMatch || sourceMatch || pointsMatch;
+    return titleMatch || sourceMatch || overviewMatch || takeawaysMatch || phasesMatch || pointsMatch;
   };
 
   const filterDigestItem = (it) => {

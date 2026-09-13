@@ -13,7 +13,7 @@
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" />
-  <link rel="stylesheet" href="styles.css?v=2.0" />
+  <link rel="stylesheet" href="styles.css?v=2.1" />
 </head>
 <body>
   <div id="app"></div>
@@ -30,13 +30,13 @@
     })();
 
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/wise-ai-daily/sw.js?v=2.0', { scope: '/wise-ai-daily/' })
+      navigator.serviceWorker.register('/wise-ai-daily/sw.js?v=2.1', { scope: '/wise-ai-daily/' })
         .then(reg => {
           reg.update();
         })
         .catch(() => {});
     }
   </script>
-  <script src="app.js?v=2.0"></script>
+  <script src="app.js?v=2.1"></script>
 </body>
 </html>
