@@ -1001,6 +1001,82 @@ function parseDurationToSeconds(str) {
   return null;
 }
 
+/**
+ * Uses the YouTube IFrame Player API to silently read the real video duration.
+ * Creates a hidden 1x1 iframe, waits for onReady, grabs getDuration(), destroys it.
+ * Resolves with duration in seconds (number) or null on timeout/error.
+ */
+function getYouTubeDuration(videoId, timeoutMs = 6000) {
+  return new Promise(resolve => {
+    if (!videoId) { resolve(null); return; }
+
+    // Reuse a loaded YT API if already present
+    const tryCreate = () => {
+      let resolved = false;
+      const container = document.createElement('div');
+      container.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden;pointer-events:none;';
+      document.body.appendChild(container);
+
+      const timer = setTimeout(() => {
+        if (!resolved) { resolved = true; cleanup(); resolve(null); }
+      }, timeoutMs);
+
+      let player;
+      function cleanup() {
+        clearTimeout(timer);
+        try { if (player) player.destroy(); } catch {}
+        try { container.remove(); } catch {}
+      }
+
+      try {
+        player = new YT.Player(container, {
+          videoId,
+          playerVars: { autoplay: 0, controls: 0, mute: 1, disablekb: 1, fs: 0, rel: 0, playsinline: 1 },
+          events: {
+            onReady: (e) => {
+              if (resolved) return;
+              resolved = true;
+              const dur = e.target.getDuration();
+              cleanup();
+              resolve(dur > 0 ? Math.round(dur) : null);
+            },
+            onError: () => {
+              if (!resolved) { resolved = true; cleanup(); resolve(null); }
+            }
+          }
+        });
+      } catch(err) {
+        if (!resolved) { resolved = true; cleanup(); resolve(null); }
+      }
+    };
+
+    if (window.YT && window.YT.Player) {
+      tryCreate();
+    } else {
+      // Load the IFrame API script if not already loading
+      const existing = document.getElementById('yt-iframe-api-script');
+      if (!existing) {
+        const script = document.createElement('script');
+        script.id = 'yt-iframe-api-script';
+        script.src = 'https://www.youtube.com/iframe_api';
+        document.head.appendChild(script);
+      }
+      // Poll until YT.Player is available (max 5s)
+      let polls = 0;
+      const poll = setInterval(() => {
+        polls++;
+        if (window.YT && window.YT.Player) {
+          clearInterval(poll);
+          tryCreate();
+        } else if (polls > 50) {
+          clearInterval(poll);
+          resolve(null);
+        }
+      }, 100);
+    }
+  });
+}
+
 function formatSecondsToTimestamp(sec) {
   const m = Math.floor(sec / 60);
   const s = Math.floor(sec % 60);
@@ -1380,16 +1456,37 @@ async function summarizeURL(forceRefresh = false) {
   const cleanTitle = rawTitle.replace(/\s*-\s*YouTube$/i, '').trim();
   const videoAuthor = videoMeta?.author_name || '';
 
-  const userDurationSec = parseDurationToSeconds(S.urlDuration);
-  const durationInstruction = userDurationSec
-    ? `ACTUAL VIDEO DURATION: ${formatSecondsToTimestamp(userDurationSec)} (${userDurationSec} seconds). ALL phases and timestamps MUST be strictly contained between 0:00 and ${formatSecondsToTimestamp(userDurationSec)}. The final phase MUST conclude at or before ${formatSecondsToTimestamp(userDurationSec)}. NEVER generate timestamps beyond this.`
-    : `CRITICAL DURATION & PHASE SIZING RULES:
-1. DEDUCE REALISTIC DURATION: Carefully infer the realistic video length from the title, creator, and format. Single-topic clips, story excerpts, and short talks (e.g. Sadhguru stories, TED-Ed clips, Shorts) are usually 3 to 6 minutes long (e.g. ~4:06), NOT 12+ minutes!
-2. PHASE COUNT:
-   - For short videos (< 6 minutes): Generate ONLY 2 to 4 phases. DO NOT stretch short clips into long videos! All timestamps MUST stay strictly within the clip duration.
-   - For standard videos (6-15 mins): Generate 3 to 5 phases.
-   - For long videos (15+ mins): Generate 5 to 7 phases.
-3. STRICT TIMESTAMPS: Every phase timestamp MUST stay within the realistic duration. The final phase MUST conclude at or before the video end time.`;
+  // Resolve real duration: user override > auto-detect from YT IFrame API > fallback prompt guidance
+  let userDurationSec = parseDurationToSeconds(S.urlDuration);
+  let detectedDurationSec = null;
+
+  if (!userDurationSec && parsed.platform === 'youtube' && parsed.id) {
+    // Silently load a 1x1 hidden player to get real duration
+    try {
+      detectedDurationSec = await getYouTubeDuration(parsed.id, 6000);
+    } catch {}
+  }
+
+  const resolvedDurationSec = userDurationSec || detectedDurationSec;
+  const resolvedDurationStr = resolvedDurationSec ? formatSecondsToTimestamp(resolvedDurationSec) : null;
+
+  // Compute ideal phase count: 1 phase per ~2.5 minutes, minimum 2, no hard cap
+  const numPhases = resolvedDurationSec
+    ? Math.max(2, Math.round(resolvedDurationSec / 150))
+    : null; // Let model decide if we have no duration info
+
+  const durationInstruction = resolvedDurationSec
+    ? `ACTUAL VIDEO DURATION: ${resolvedDurationStr} (${resolvedDurationSec} seconds total).
+REQUIRED NUMBER OF PHASES: ${numPhases} — one per roughly ${Math.round(resolvedDurationSec / numPhases)} seconds.
+ALL phase timestamps MUST be strictly within 0:00 and ${resolvedDurationStr}.
+The final phase MUST end exactly at ${resolvedDurationStr}.
+Distribute phases evenly across the full runtime — do NOT cluster them all in the first few minutes.
+NEVER generate any timestamp beyond ${resolvedDurationStr}.`
+    : `PHASE SIZING RULES (no duration provided):
+- Infer realistic video length from title, channel and format.
+- Generate one phase per roughly 2-3 minutes of estimated runtime.
+- Every timestamp MUST stay within the estimated video duration.
+- The final phase MUST conclude at the estimated end time.`;
 
   const prompt = isVideo
     ? `You are an elite video summarizer and research analyst. Produce an authoritative, comprehensive, deeply technical and highly structured summary of this video:
@@ -1421,7 +1518,7 @@ Return ONLY valid JSON (no markdown fences, no extra text):
   "type": "${parsed.type}",
   "url": "${url}",
   "source": "${(videoAuthor || 'Creator').replace(/"/g, '\\"')}",
-  "duration": "${userDurationSec ? formatSecondsToTimestamp(userDurationSec) : 'realistic duration e.g. 4:06 or 12:30'}",
+  "duration": "${resolvedDurationStr || 'realistic duration e.g. 4:06 or 12:30'}",
   "overview": "2-3 sentence executive overview of what this video teaches and who it is for",
   "takeaways": [
     "Core principle or insight 1",
