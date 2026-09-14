@@ -1,795 +1,116 @@
 /**
- * AI Daily — Social Video Summarizer & AI News Digest
- * Uses Groq (free) with open-source models (Llama, Mixtral, Gemma).
- * Model list is fetched live from your API key — nothing hardcoded.
- * v1.4 — cache-bust 2026-09-13 (full history & URL summaries support)
+ * Wise Simple Studio — AI Video & Story Animation Studio
+ * 100% Client-Side Pure Studio Application
  */
 
-// ── Constants ────────────────────────────────────────────────────
-const GROQ_API    = 'https://api.groq.com/openai/v1/chat/completions';
-const GROQ_MODELS = 'https://api.groq.com/openai/v1/models';
-const TODAY       = new Date().toISOString().slice(0, 10);
-
-// Preference order — first match from your account wins
-const MODEL_PRIORITY = [
-  'llama3-70b-8192',
-  'llama-3.1-70b-versatile',
+const GROQ_API = 'https://api.groq.com/openai/v1/chat/completions';
+const DEFAULT_GROQ_MODELS = [
   'llama-3.3-70b-versatile',
   'llama-3.1-8b-instant',
-  'llama3-8b-8192',
-  'mixtral-8x7b-32768',
   'gemma2-9b-it',
-  'gemma-7b-it',
+  'mixtral-8x7b-32768'
 ];
 
-const PLATFORMS = {
-  youtube:   { label:'YouTube',   cls:'t-yt',    icon:'ti-brand-youtube'    },
-  instagram: { label:'Instagram', cls:'t-ig',    icon:'ti-brand-instagram'  },
-  facebook:  { label:'Facebook',  cls:'t-fb',    icon:'ti-brand-facebook'   },
-  twitter:   { label:'X/Twitter', cls:'t-tw',    icon:'ti-brand-x'          },
-  github:    { label:'GitHub',    cls:'t-gh',    icon:'ti-brand-github'     },
-  web:       { label:'Web',       cls:'t-web',   icon:'ti-world'            },
-  paper:     { label:'Paper',     cls:'t-paper', icon:'ti-file-description' },
+const STUDIO_STYLES = {
+  kids3d: {
+    label: '3D Kids Animation (Pixar/Disney)',
+    icon: 'ti-sparkles',
+    desc: 'Vibrant, colorful, expressive characters, whimsical lighting, joyful humor'
+  },
+  cinematic: {
+    label: 'Cinematic Live Action',
+    icon: 'ti-movie',
+    desc: 'Photorealistic, 35mm film look, dramatic lighting and natural depth of field'
+  },
+  anime: {
+    label: 'Storybook & Anime',
+    icon: 'ti-palette',
+    desc: 'Hand-drawn anime aesthetic, painterly backgrounds, warm emotions'
+  },
+  cyberpunk: {
+    label: 'Sci-Fi / Cyberpunk',
+    icon: 'ti-cpu',
+    desc: 'Futuristic, neon-lit, volumetric smoke, high-tech environments'
+  },
+  claymation: {
+    label: 'Claymation & Stop Motion',
+    icon: 'ti-ball-tennis',
+    desc: 'Textured, tactile, handcrafted character models and whimsical sets'
+  },
+  vintage: {
+    label: 'Vintage 1960s Film',
+    icon: 'ti-camera',
+    desc: 'Warm grain, technicolor hues, nostalgic retro cinema tone'
+  }
 };
 
-// ── State ────────────────────────────────────────────────────────
+const STUDIO_DURATIONS = [
+  { value: '15s',  label: '15 sec', scenes: 1 },
+  { value: '30s',  label: '30 sec', scenes: 2 },
+  { value: '60s',  label: '1 min',  scenes: 4 },
+  { value: '90s',  label: '90 sec', scenes: 6 },
+  { value: '120s', label: '2 min',  scenes: 8 },
+  { value: '420s', label: '7 min (Kids Epic)', scenes: 12 }
+];
+
+// ── State Management ──────────────────────────────────────────────────
 const S = {
-  tab: 'feed',
-  apiKey: '',
-  apiKeyValid: null,
-  showSetup: false,
-  availableModels: [],
-  activeModel: '',
+  apiKey: localStorage.getItem('groq-key') || '',
+  googleApiKey: localStorage.getItem('google-key') || '',
+  googleClientId: localStorage.getItem('gdrive-client-id') || '',
+  googleDriveConnected: !!localStorage.getItem('gdrive-access-token'),
+  availableModels: [...DEFAULT_GROQ_MODELS],
+  activeModel: localStorage.getItem('active-model') || 'llama-3.3-70b-versatile',
   modelsLoading: false,
-  todayDigest: null,
-  following: [],
-  historyDates: [],
-  historySelected: null,
-  historyData: null,
-  historyFilter: 'all', // 'all' | 'digests' | 'summaries'
-  historySearch: '',
-  urlSummaries: [],
-  showSnapshots: false,
-  activeSnapshots: {},
-  activePlayerMoments: {},
-  lightbox: null,
-  loading: false,
-  loadError: '',
-  urlInput: '',
-  urlResult: null,
-  urlLoading: false,
-  urlError: '',
-  newHandle: '',
-  newPlatform: 'twitter',
-  newName: '',
-  followError: '',
-  tempKey: '',
+  showSetup: false,
+
+  // Studio Workflow Pipeline
+  studioStep: 0,
+  studioTopic: '',
+  studioStyle: 'kids3d',
+  studioDuration: '420s',
+  studioAspect: '16:9',
+  studioNumScenes: 12,
+  studioScript: null,
+  studioPrompts: [],
+  studioCharacters: [],
+  studioClips: [],
+  studioLoading: false,
+  studioProgress: '',
+  studioError: '',
+  studioLogs: [],
+
+  // Quality Validation Alert
+  qualityAlert: null,
+
+  // Interactive Story Player
+  studioPlayerActive: true,
+  studioPlayerCurrentScene: 0,
+  studioPlayerPlaying: false,
+  studioPlayerAudioMuted: false,
+
+  // Modals
+  historyModal: { open: false, filter: 'all' },
+  clipCutModal: { open: false, clipIndex: null },
+  exportProgressModal: { open: false, progress: 0, currentScene: 0, totalScenes: 0, statusText: '' },
+  lightbox: { open: false, url: '', title: '' }
 };
 
-// ── Storage ──────────────────────────────────────────────────────
-const sg = k => { try { const v=localStorage.getItem(k); return v?JSON.parse(v):null; } catch { return null; } };
-const ss = (k,v) => { try { localStorage.setItem(k,JSON.stringify(v)); } catch {} };
-const sl = p => { const r=[]; for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k?.startsWith(p))r.push(k);} return r; };
+// Storage Helpers
+const sg = k => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch { return null; } };
+const ss = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
 
-function resolveItemLink(item) {
-  if (!item) return '#';
-  let url = (item.url || '').trim();
-  const title = (item.title || '').trim();
-  const platform = (item.platform || '').toLowerCase();
-
-  // 1. If it's already a working search URL or verified live API URL
-  if (url.includes('google.com/search') || url.includes('news.google.com/search') ||
-      url.includes('huggingface.co/papers/') || url.includes('news.ycombinator.com/item')) {
-    return url;
-  }
-
-  // 2. Detect hallucinated deep paths (corporate blogs, invented slugs)
-  const hallucinationPatterns = [
-    /anthropic\.com\/news\/.+/i,
-    /openai\.com\/(index|blog)\/.+/i,
-    /blog\.google\/.+/i,
-    /techcrunch\.com\/.+/i,
-    /theverge\.com\/.+/i,
-    /wired\.com\/.+/i,
-    /venturebeat\.com\/.+/i,
-    /x\.com\/.+\/status\/\d+/i,
-    /twitter\.com\/.+\/status\/\d+/i,
-    /arxiv\.org\/abs\/\d+/i
-  ];
-
-  const isLikelyHallucinated = !url || url === '#' || hallucinationPatterns.some(rx => rx.test(url));
-
-  if (isLikelyHallucinated) {
-    const q = encodeURIComponent(title || item.source || 'AI news');
-    if (platform === 'github') return `https://github.com/search?q=${q}&type=repositories`;
-    if (platform === 'paper') return `https://arxiv.org/search/?query=${q}&searchtype=all`;
-    if (platform === 'youtube') return `https://www.youtube.com/results?search_query=${q}`;
-    if (platform === 'twitter' || platform === 'x') return `https://x.com/search?q=${q}`;
-    return `https://news.google.com/search?q=${q}`;
-  }
-
-  return url;
+function studioLog(msg) {
+  const ts = new Date().toLocaleTimeString();
+  S.studioLogs.unshift({ ts, msg });
+  if (S.studioLogs.length > 50) S.studioLogs.pop();
+  console.log(`[${ts}] ${msg}`);
 }
 
-function getOfficialHub(url = '', source = '', title = '') {
-  const combined = `${url} ${source} ${title}`.toLowerCase();
-  if (combined.includes('anthropic') || combined.includes('claude')) return { label: 'Anthropic News', url: 'https://www.anthropic.com/news' };
-  if (combined.includes('openai') || combined.includes('chatgpt') || combined.includes('gpt')) return { label: 'OpenAI News', url: 'https://openai.com/news' };
-  if (combined.includes('google') || combined.includes('gemini') || combined.includes('deepmind')) return { label: 'Google AI Blog', url: 'https://blog.google/technology/ai/' };
-  if (combined.includes('meta') || combined.includes('llama')) return { label: 'Meta AI Blog', url: 'https://ai.meta.com/blog/' };
-  if (combined.includes('mistral')) return { label: 'Mistral News', url: 'https://mistral.ai/news/' };
-  if (combined.includes('huggingface') || combined.includes('hugging face')) return { label: 'Hugging Face Blog', url: 'https://huggingface.co/blog' };
-  if (combined.includes('github')) return { label: 'GitHub Trending', url: 'https://github.com/trending' };
-  if (combined.includes('arxiv')) return { label: 'arXiv AI Recent', url: 'https://arxiv.org/list/cs.AI/recent' };
-  if (combined.includes('ycombinator') || combined.includes('hacker news')) return { label: 'Hacker News', url: 'https://news.ycombinator.com/' };
-  return null;
-}
-
-function normalizeDigest(data) {
-  if (!data) return null;
-  const rawItems = Array.isArray(data) 
-    ? data 
-    : (data.items || data.articles || data.news || data.stories || data.digest || data.trending || data.posts || []);
-  
-  const items = (Array.isArray(rawItems) ? rawItems : []).map(item => {
-    const safeUrl = resolveItemLink(item);
-    return {
-      ...item,
-      url: safeUrl,
-      originalUrl: item.originalUrl || item.url || safeUrl
-    };
-  });
-
-  return {
-    ...(typeof data === 'object' && !Array.isArray(data) ? data : {}),
-    fetchedAt: data.fetchedAt || '',
-    items
-  };
-}
-
-function refreshHistoryDates() {
-  S.historyDates = sl('digest:')
-    .map(k => k.replace('digest:', ''))
-    .filter(Boolean)
-    .sort()
-    .reverse();
-}
-
-function formatDateLabel(dateStr) {
-  if (!dateStr) return '';
-  const parts = dateStr.split('-').map(Number);
-  if (parts.length !== 3 || parts.some(isNaN)) return dateStr;
-  const dt = new Date(parts[0], parts[1] - 1, parts[2]);
-  const formatted = dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-  return dateStr === TODAY ? `${formatted} · Today` : formatted;
-}
-
-// ── Fetch model list live from Groq ──────────────────────────────
-async function loadModels(key) {
-  S.modelsLoading = true; S.availableModels = []; S.activeModel = ''; render();
-  try {
-    const res = await fetch(GROQ_MODELS, {
-      headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' }
-    });
-    if (!res.ok) { S.apiKeyValid = false; S.modelsLoading = false; render(); return; }
-    const data = await res.json();
-    // Only keep text generation models (exclude whisper/tts/vision/guard)
-    S.availableModels = (data.data || [])
-      .map(m => m.id)
-      .filter(id =>
-        !id.includes('whisper') &&
-        !id.includes('tts') &&
-        !id.includes('distil') &&
-        !id.includes('guard') &&
-        !id.includes('vision') &&
-        !id.includes('tool-use') // preview models sometimes restricted
-      )
-      .sort();
-
-    // Pick best model from priority list, fall back to first available
-    const saved = sg('active-model');
-    S.activeModel =
-      (saved && S.availableModels.includes(saved)) ? saved :
-      MODEL_PRIORITY.find(m => S.availableModels.includes(m)) ||
-      S.availableModels[0] || '';
-
-    ss('active-model', S.activeModel);
-    S.apiKeyValid = true;
-  } catch(e) {
-    S.apiKeyValid = false;
-  }
-  S.modelsLoading = false; render();
-}
-
-// ── Init ─────────────────────────────────────────────────────────
-// ── Init ─────────────────────────────────────────────────────────
-async function init() {
-  S.apiKey       = sg('groq-api-key') || '';
-  S.following    = sg('ai-following') || [];
-  S.todayDigest  = normalizeDigest(sg('digest:'+TODAY));
-  S.urlSummaries = sg('ai-summaries') || [];
-
-  const seedVipassana = {
-    id: 'sum-seed-vipassana',
-    canonicalKey: 'youtube:vwLVjHEGGK0',
-    title: 'Guided Vipassana Meditation — 1 Hour S.N. Goenka Session',
-    platform: 'youtube',
-    type: 'Video',
-    url: 'https://www.youtube.com/watch?v=vwLVjHEGGK0',
-    source: 'S.N. Goenka / Vipassana Research Institute',
-    duration: '1:02:48',
-    date: TODAY,
-    createdAt: new Date().toISOString(),
-    overview: 'This video features a guided **Vipassana meditation** session led by *S.N. Goenka*, specifically designed for experienced students who have already completed a 10-day course. The session emphasizes cultivating **Equanimity** (*Samata*) and wisdom (*Panna*) through observing bodily sensations without reacting.',
-    takeaways: [
-      'Observe every bodily sensation objectively without craving (Raga) or aversion (Dosa).',
-      'Realize experientially the Law of Impermanence (Anicca)—every sensation arises only to pass away.',
-      'Maintain continuous awareness and unwavering mental balance (Samata) during long sittings (Adhitthana).',
-      'Conclude practice by radiating peaceful loving-kindness and sharing merits through Mangal Maitri.'
-    ],
-    phases: [
-      {
-        title: 'Anapana (Breath Awareness)',
-        timeRange: '2:36 - 10:35',
-        timestamp: '2:36',
-        seconds: 156,
-        snapshotUrl: 'snapshots/vwLVjHEGGK0/snap_156.jpg',
-        summary: 'The session begins by observing the natural flow of the breath at the entrance of the nostrils to calm and focus the mind.',
-        subPoints: [
-          'Observe natural respiration: incoming breath, outgoing breath—as it is, without artificial regulation or deep breathing.',
-          'Fix attention exclusively on the small triangular area from the nostrils down to the upper lip.',
-          'Cultivate sharp, one-pointed concentration (Samadhi) to prepare the mind for subtle bodily investigation.'
-        ]
-      },
-      {
-        title: 'Vipassana Technique (Head-to-Toe Body Scan)',
-        timeRange: '11:29 - 50:11',
-        timestamp: '11:29',
-        seconds: 689,
-        snapshotUrl: 'snapshots/vwLVjHEGGK0/snap_689.jpg',
-        summary: 'The core practice involves scanning the body from the top of the head to the tips of the toes and back again. The goal is to observe sensations objectively, understanding the Law of Impermanence (Anicca).',
-        subPoints: [
-          'Equanimity (Samata): Avoid reacting with craving when experiencing pleasant sensations or aversion when feeling unpleasant sensations.',
-          'Sankhara Eradication: Sittings of strong determination (Adhitthana). By remaining balanced in the face of physical discomfort, unconscious habit patterns of misery are dissolved at their root.',
-          'Objective Observation: Sensations may be heavy, heat, itching, tingling, or subtle vibrations—observe them like a scientist with detached awareness.'
-        ]
-      },
-      {
-        title: 'Mangal Maitri (Metta Meditation)',
-        timeRange: '54:06 - 1:02:48',
-        timestamp: '54:06',
-        seconds: 3246,
-        snapshotUrl: 'snapshots/vwLVjHEGGK0/snap_3011.jpg',
-        summary: 'The session concludes with the practice of loving-kindness (Metta) and goodwill towards all living beings.',
-        subPoints: [
-          'Radiate the peaceful, harmonious vibrations generated during the sitting to all surrounding beings.',
-          'Chant and affirm universal well-being: Bhavatu Sabba Mangalam (May all beings be peaceful, happy, and liberated).',
-          'Close the meditation with forgiveness, shared joy, and deep mental purification.'
-        ]
-      }
-    ],
-    points: [
-      { timestamp: "2:36", seconds: 156, text: "Anapana (2:36 - 10:35): Natural breath awareness at the entrance of the nostrils to calm the mind and establish Samadhi." },
-      { timestamp: "11:29", seconds: 689, text: "Vipassana Technique (11:29 - 50:11): Systematic head-to-toe body scan cultivating Equanimity (Samata) and realizing Impermanence (Anicca)." },
-      { timestamp: "54:06", seconds: 3246, text: "Mangal Maitri (54:06 - 1:02:48): Concluding Metta meditation radiating loving-kindness and universal peace (Bhavatu Sabba Mangalam)." }
-    ]
-  };
-
-  const seedAiVideo = {
-    id: 'sum-seed-aivideo',
-    canonicalKey: 'youtube:Qsi9MeLh95Q',
-    title: 'RIP Paid Tools: Make LONG AI Videos With Consistency!',
-    platform: 'youtube',
-    type: 'Video',
-    url: 'https://www.youtube.com/watch?v=Qsi9MeLh95Q',
-    source: 'Mr Void',
-    duration: '11:51',
-    date: TODAY,
-    createdAt: new Date().toISOString(),
-    overview: 'This video provides a **fully automated, zero-cost blueprint** for creating high-quality, long-form AI videos with consistent character designs. The creator emphasizes moving away from paid tools by utilizing a specific workflow of free platforms.',
-    takeaways: [
-      'Lock facial geometry upfront with anchor character portraits to eliminate character face drift across scenes.',
-      'Automate prompt expansion, batch image rendering, and frame animation using free Chrome extensions.',
-      'Eliminate monthly software costs by chaining Google Gemini, Google Flow, Meta AI, and Google Vids.'
-    ],
-    phases: [
-      {
-        title: 'The Problem & The Blueprint',
-        timeRange: '0:00 - 1:05',
-        timestamp: '0:00',
-        seconds: 0,
-        snapshotUrl: 'snapshots/Qsi9MeLh95Q/snap_65.jpg',
-        summary: 'Why AI video channels fail due to face mutations, broken storylines, and paywalls, and how this zero-cost automation pipeline fixes it.',
-        subPoints: [
-          'Paywalls like Grok and Midjourney make long-form video production unsustainable on a budget.',
-          'Character facial inconsistency across scenes is the number one reason audience retention drops.'
-        ]
-      },
-      {
-        title: 'Story & Prompt Generation',
-        timeRange: '1:05 - 2:08',
-        timestamp: '1:05',
-        seconds: 65,
-        snapshotUrl: 'snapshots/Qsi9MeLh95Q/snap_65.jpg',
-        summary: 'Uses Google Gemini to generate the complete narrative story structure and detailed visual prompts based on master templates.',
-        subPoints: [
-          'Master prompt breaks down the plot into chronological scene-by-scene script beats.',
-          'Generates 18+ detailed visual prompts maintaining consistent environment descriptions.'
-        ]
-      },
-      {
-        title: 'Character Consistency',
-        timeRange: '2:50 - 3:55',
-        timestamp: '2:50',
-        seconds: 170,
-        snapshotUrl: 'snapshots/Qsi9MeLh95Q/snap_170.jpg',
-        summary: 'Generates anchor character images using Google Flow to ensure faces remain consistent throughout the project.',
-        subPoints: [
-          'Generates 16:9 high-resolution anchor character portraits with fixed facial geometry.',
-          'Locks facial features, lighting, and wardrobe to prevent visual drift in downstream rendering.'
-        ]
-      },
-      {
-        title: 'Mass Image Generation',
-        timeRange: '4:00 - 5:50',
-        timestamp: '4:00',
-        seconds: 240,
-        snapshotUrl: 'snapshots/Qsi9MeLh95Q/snap_240.jpg',
-        summary: 'Utilizes the Autoflow Chrome extension to automate the batch creation of consistent images.',
-        subPoints: [
-          'Feeds anchor portraits and scene prompts directly into Autoflow for non-stop batch generation.',
-          'Automatically downloads rendered scene frames into designated project directories.'
-        ]
-      },
-      {
-        title: 'Animation Automation',
-        timeRange: '6:00 - 8:46',
-        timestamp: '6:00',
-        seconds: 360,
-        snapshotUrl: 'snapshots/Qsi9MeLh95Q/snap_360.jpg',
-        summary: 'Employs Meta AI combined with the Meta Automation extension to animate static images into video clips.',
-        subPoints: [
-          'Injects customized camera motion prompts (pan, tilt, zoom, dolly) for cinematic feel.',
-          'Runs unattended batch frame-to-video rendering with zero watermarks.'
-        ]
-      },
-      {
-        title: 'Voiceover & Soundtrack',
-        timeRange: '9:10 - 10:48',
-        timestamp: '9:10',
-        seconds: 550,
-        snapshotUrl: 'snapshots/Qsi9MeLh95Q/snap_526.jpg',
-        summary: 'Integrates Google AI Studio (Gemini 2.5 Pro single speaker audio) and Gemini audio prompts for royalty-free background audio.',
-        subPoints: [
-          'Studio-grade expressive narration generated with natural cadence and tone.',
-          'AI-composed atmospheric soundscapes synchronized to video emotional arc.'
-        ]
-      },
-      {
-        title: 'Bonus High-Motion Safety Net',
-        timeRange: '10:50 - 11:51',
-        timestamp: '10:50',
-        seconds: 650,
-        snapshotUrl: 'snapshots/Qsi9MeLh95Q/snap_526.jpg',
-        summary: 'Leverages Google Vids (Veo 3.1) for high-complexity action sequences with zero cost.',
-        subPoints: [
-          '10-12 free daily generations for complex physics action shots where simple motion models struggle.',
-          'Seamless final export and assembly in any standard timeline editor.'
-        ]
-      }
-    ],
-    points: [
-      { timestamp: "0:00", seconds: 0, text: "The Problem (0:00 - 1:05): Overcoming face mutations and paid tool paywalls." },
-      { timestamp: "1:05", seconds: 65, text: "Story & Prompt Generation (1:05 - 2:08): Google Gemini structured story and prompt breakdown." },
-      { timestamp: "2:50", seconds: 170, text: "Character Consistency (2:50 - 3:55): Google Flow anchor character generation." },
-      { timestamp: "4:00", seconds: 240, text: "Mass Image Generation (4:00 - 5:50): Autoflow Chrome extension automated batch rendering." },
-      { timestamp: "6:00", seconds: 360, text: "Animation (6:00 - 8:46): Meta AI + Meta Automation extension for camera motion." },
-      { timestamp: "9:10", seconds: 550, text: "Voiceover & Soundtrack (9:10 - 10:48): Google AI Studio voice generation." },
-      { timestamp: "10:50", seconds: 650, text: "Bonus High-Motion Safety Net (10:50 - 11:51): Google Vids Veo 3.1 for complex physics." }
-    ]
-  };
-
-  const seedAstra = {
-    id: 'sum-seed-astra',
-    canonicalKey: 'youtube:PEEBZwGetyc',
-    title: 'How I Save 92% of My AI Credits With GPT-6 Astra + Blender (Full Workflow)',
-    platform: 'youtube',
-    type: 'Video',
-    url: 'https://youtu.be/PEEBZwGetyc',
-    source: 'Sanji Nai-Chien',
-    duration: '16:15',
-    date: TODAY,
-    createdAt: new Date().toISOString(),
-    overview: 'This AI filmmaking tutorial demonstrates how to run GPT-6 Astra inside Codex with Computer Use and the Higgsfield AI Blender plugin to create cinematic 3D product commercials. By using a lightweight Blender 3D previz rather than raw text prompting, creators achieve precise camera angles and lighting while slashing AI video generation credits by 92%.',
-    takeaways: [
-      'A Blender 3D previz provides generative AI models exact spatial geometry, cutting credit burn by 92% compared to pure prompt-and-pray iterations.',
-      'GPT-6 Astra with Codex and Computer Use automatically translates chat instructions into editable Blender 3D scenes.',
-      'Phone gyro motion can be recorded and transferred directly into Blender virtual cameras for realistic, organic cinematography.',
-      'A single 3D previz layout can be re-rendered across multiple products, enabling scalable commercial production.'
-    ],
-    phases: [
-      {
-        title: 'Why GPT-6 Astra Is the New AI King for 3D',
-        timeRange: '0:00 - 1:40',
-        timestamp: '0:00',
-        seconds: 0,
-        snapshotUrl: 'snapshots/PEEBZwGetyc/snap_0.jpg',
-        summary: 'Overview of why traditional text-to-video AI burns enormous credit budgets due to random camera drift and lighting inconsistencies.',
-        subPoints: [
-          'Raw prompting forces creators to re-roll generations 10-20 times for a single usable angle.',
-          'GPT-6 Astra incorporates 3D spatial awareness to bridge standard 3D software with generative diffusion.'
-        ]
-      },
-      {
-        title: 'Setup: Higgsfield Blender Plugin + Codex',
-        timeRange: '1:40 - 2:50',
-        timestamp: '1:40',
-        seconds: 100,
-        snapshotUrl: 'snapshots/PEEBZwGetyc/snap_100.jpg',
-        summary: 'Installing and connecting the Higgsfield AI Blender plugin with OpenAI Codex Computer Use.',
-        subPoints: [
-          'Codex interprets natural language instructions and executes Python API commands in Blender.',
-          'Scene Builder automatically populates 3D primitives and cameras matching prompt specs.'
-        ]
-      },
-      {
-        title: 'Building the Earbuds Commercial From Scratch',
-        timeRange: '2:50 - 5:45',
-        timestamp: '2:50',
-        seconds: 170,
-        snapshotUrl: 'snapshots/PEEBZwGetyc/snap_170.jpg',
-        summary: 'Step-by-step assembly of a photorealistic earbuds product commercial using procedural lighting and camera rigging.',
-        subPoints: [
-          'Setting up three-point studio lighting and turntable camera movement.',
-          'Importing basic geometry and locking focus distances on the product mesh.'
-        ]
-      },
-      {
-        title: 'Blender Previz vs. Prompt-Only Generation',
-        timeRange: '5:45 - 7:40',
-        timestamp: '5:45',
-        seconds: 345,
-        snapshotUrl: 'snapshots/PEEBZwGetyc/snap_345.jpg',
-        summary: 'Direct cost and quality comparison showing how previz guidance saves 92% of generation credits.',
-        subPoints: [
-          'Prompt-only generations required 120 credits across failed takes to get one coherent shot.',
-          'Previz-guided Astra generations nailed framing on attempt 1, costing under 10 credits.'
-        ]
-      },
-      {
-        title: 'One Previz, Three Products & Phone Gyro Camera',
-        timeRange: '7:40 - 11:00',
-        timestamp: '7:40',
-        seconds: 460,
-        snapshotUrl: 'snapshots/PEEBZwGetyc/snap_460.jpg',
-        summary: 'Reusing a single previz setup across cosmetics, tech devices, and beverages while capturing handheld phone motion.',
-        subPoints: [
-          'Swap 3D asset in center while keeping identical lighting, camera move, and render pipeline.',
-          'Map smartphone motion sensors straight into Blender camera transform matrices for natural handheld shake.'
-        ]
-      },
-      {
-        title: '30-Second Continuous Shot & Astra vs. Fable 5.1',
-        timeRange: '11:00 - 16:15',
-        timestamp: '11:00',
-        seconds: 660,
-        snapshotUrl: 'snapshots/PEEBZwGetyc/snap_660.jpg',
-        summary: 'Creating a seamless 30-second unbroken cinematic shot and comparing benchmark results against Fable 5.1.',
-        subPoints: [
-          'Continuous camera flight path through multiple commercial environments without cutting.',
-          'Astra outperforms Fable 5.1 in edge fidelity, product reflection realism, and temporal consistency.'
-        ]
-      }
-    ],
-    points: [
-      { timestamp: "0:00", seconds: 0, text: "Why GPT-6 Astra Is the AI King for 3D (0:00 - 1:40): Solving the credit burn crisis." },
-      { timestamp: "1:40", seconds: 100, text: "Setup: Higgsfield Blender Plugin + Codex (1:40 - 2:50): Connecting AI chat to 3D." },
-      { timestamp: "2:50", seconds: 170, text: "Building the Earbuds Commercial (2:50 - 5:45): Studio lighting and turntable camera." },
-      { timestamp: "5:45", seconds: 345, text: "Blender Previz vs. Prompt Only (5:45 - 7:40): 92% credit savings proof." },
-      { timestamp: "7:40", seconds: 460, text: "Reusing Previz & Phone Gyro (7:40 - 11:00): Transferring real phone motion to virtual camera." },
-      { timestamp: "11:00", seconds: 660, text: "30-Second Continuous Shot & Benchmark (11:00 - 16:15): Astra vs. Fable 5.1 head-to-head." }
-    ]
-  };
-
-  const seedNeemKaroliBaba = {
-    id: 'sum-seed-neemkaroli',
-    canonicalKey: 'youtube:ewgAKF9j__o',
-    title: 'Neem Karoli Baba’s Incredible Capabilities | Sadhguru',
-    platform: 'youtube',
-    type: 'Video',
-    url: 'https://youtu.be/ewgAKF9j__o',
-    source: 'Sadhguru',
-    duration: '4:06',
-    date: TODAY,
-    createdAt: new Date().toISOString(),
-    overview: 'In this discourse, Sadhguru recounts the historic encounter between Harvard psychologist Dr. Richard Alpert (Ram Dass) and the Indian mystic Neem Karoli Baba (Maharaj-ji). Looking for a spiritual shortcut through psychedelics, Ram Dass offered Baba a massive dose of LSD, only to witness Baba consume it with absolute equanimity and zero physical or psychological effect—demonstrating that true spiritual mastery stems from inner stability and capability rather than external chemical stimulation.',
-    takeaways: [
-      'External chemical substances can only distort sensory perception temporarily; genuine spiritual awakening requires stable inner mastery.',
-      'Neem Karoli Baba demonstrated that an established yogic state remains completely untouched by heavy doses of psychedelics.',
-      'True spiritual capability is measured by lived inner stability and ease, not intellectual theories or chemical experimentation.',
-      'Direct presence with an authentic, capable master shifts a seeker’s trajectory far more permanently than any shortcut.'
-    ],
-    phases: [
-      {
-        title: 'Ram Dass & The Quest for Chemical Shortcuts',
-        timeRange: '0:00 - 1:15',
-        timestamp: '0:00',
-        seconds: 0,
-        snapshotUrl: 'snapshots/ewgAKF9j__o/snap_0.jpg',
-        summary: 'Sadhguru introduces Dr. Richard Alpert (Ram Dass), a Harvard professor who traveled to India with pure LSD believing chemical shortcuts could replace disciplined spiritual practice.',
-        subPoints: [
-          'Ram Dass arrived in the Himalayas seeking a master who could validate or explain his psychedelic experiences.',
-          'He carried medical-grade LSD intending to test spiritual adepts and discover if enlightenment could be chemically triggered.'
-        ]
-      },
-      {
-        title: 'Meeting Neem Karoli Baba & The LSD Challenge',
-        timeRange: '1:15 - 2:30',
-        timestamp: '1:15',
-        seconds: 75,
-        snapshotUrl: 'snapshots/ewgAKF9j__o/snap_75.jpg',
-        summary: 'Ram Dass meets Neem Karoli Baba and offers him a massive dose of LSD to see how an authentic yogic master reacts.',
-        subPoints: [
-          'Baba asks for the entire supply and casually consumes enough LSD to incapacitate several adult men.',
-          'Ram Dass watches intensely for hours expecting pupil dilation, disorientation, or ecstasy.'
-        ]
-      },
-      {
-        title: 'Unshakable Equanimity & Inner Mastery',
-        timeRange: '2:30 - 3:30',
-        timestamp: '2:30',
-        seconds: 150,
-        snapshotUrl: 'snapshots/ewgAKF9j__o/snap_150.jpg',
-        summary: 'Baba exhibits zero psychological or physical alteration, effortlessly carrying on normal conversations without the slightest tremor in his awareness.',
-        subPoints: [
-          'Baba points out that while chemicals may offer temporary glimpses, they remain dependent on external conditions and fade quickly.',
-          'The master’s mind already rests in a baseline state far beyond what any chemical compound can induce.'
-        ]
-      },
-      {
-        title: 'Capability Over Knowledge & Spiritual Awakening',
-        timeRange: '3:30 - 4:06',
-        timestamp: '3:30',
-        seconds: 210,
-        snapshotUrl: 'snapshots/ewgAKF9j__o/snap_210.jpg',
-        summary: 'Witnessing genuine mastery transforms Ram Dass, prompting him to discard chemical reliance in favor of authentic inner sadhana and guru devotion.',
-        subPoints: [
-          'Sadhguru concludes that true tantra and spirituality are defined by lived inner capability rather than intellectual theories.',
-          'Direct presence with an awakened master shifts consciousness far more permanently than any shortcut.'
-        ]
-      }
-    ],
-    points: [
-      { timestamp: "0:00", seconds: 0, text: "Ram Dass & Chemical Shortcuts (0:00 - 1:15): Journeying to India with LSD in search of a guru." },
-      { timestamp: "1:15", seconds: 75, text: "The LSD Challenge (1:15 - 2:30): Handing Baba a massive dose to test his state." },
-      { timestamp: "2:30", seconds: 150, text: "Unshakable Equanimity (2:30 - 3:30): Baba consumes the drug with zero physical or mental effect." },
-      { timestamp: "3:30", seconds: 210, text: "Capability Over Knowledge (3:30 - 4:06): Transforming Ram Dass from shortcut-seeker to sincere disciple." }
-    ]
-  };
-
-  // Register in persistent url-cache store
-  ss('url-cache:youtube:vwLVjHEGGK0', seedVipassana);
-  ss('url-cache:youtube:Qsi9MeLh95Q', seedAiVideo);
-  ss('url-cache:youtube:PEEBZwGetyc', seedAstra);
-  ss('url-cache:youtube:ewgAKF9j__o', seedNeemKaroliBaba);
-
-  // Upgrade or seed S.urlSummaries with latest rich seeds
-  const otherSummaries = (S.urlSummaries || []).filter(s => 
-    !(s.url || '').includes('vwLVjHEGGK0') && !(s.url || '').includes('Qsi9MeLh95Q') && !(s.url || '').includes('PEEBZwGetyc') && !(s.url || '').includes('ewgAKF9j__o')
-  );
-  S.urlSummaries = [seedNeemKaroliBaba, seedAstra, seedVipassana, seedAiVideo, ...otherSummaries];
-  ss('ai-summaries', S.urlSummaries);
-
-  refreshHistoryDates();
-  S.showSetup    = !S.apiKey;
-
-
-  // Check for URL shared via iOS Shortcut or share.html redirect
-  const pending = sessionStorage.getItem('pending-share');
-  if (pending) {
-    sessionStorage.removeItem('pending-share');
-    S.tab = 'add';
-    S.urlInput = pending;
-  }
-
-  render();
-  if (S.apiKey) {
-    await loadModels(S.apiKey);
-    // Auto-summarize if a URL was shared in (after models are loaded)
-    if (pending && S.activeModel) {
-      setTimeout(() => summarizeURL(), 300);
-    }
-  }
-}
-
-
-// ── Save API key ─────────────────────────────────────────────────
-async function saveKey() {
-  const key = S.tempKey.trim();
-  if (!key.startsWith('gsk_')) {
-    S.loadError = 'Groq keys start with gsk_ — check and try again.'; render(); return;
-  }
-  // Clear any stale model cache
-  localStorage.removeItem('active-model');
-  S.apiKey = key;
-  ss('groq-api-key', key);
-  S.showSetup = false;
-  S.loadError = '';
-  S.tempKey = '';
-  render();
-  await loadModels(key);
-}
-
-// ── Change model ─────────────────────────────────────────────────
-function changeModel(id) {
-  S.activeModel = id;
-  ss('active-model', id);
-  render();
-}
-
-// ── Core API call & Resilient JSON Parser ─────────────────────────
-function cleanAndParseJSON(rawText) {
-  if (!rawText || typeof rawText !== 'string') {
-    throw new Error('Model returned an empty response. Try again.');
-  }
-
-  // Extract outer-most JSON object or array
-  const firstBrace = rawText.indexOf('{');
-  const lastBrace = rawText.lastIndexOf('}');
-  let jsonStr = (firstBrace !== -1 && lastBrace > firstBrace)
-    ? rawText.slice(firstBrace, lastBrace + 1)
-    : rawText.trim();
-
-  // 1. Direct parse attempt
-  try {
-    return JSON.parse(jsonStr);
-  } catch (e1) {}
-
-  // 2. Comprehensive sanitation for LLM syntax defects (e.g. [...], trailing commas)
-  let cleaned = jsonStr
-    // Remove markdown code fences if any
-    .replace(/```(?:json)?/gi, '')
-    // Replace empty/standalone ellipsis arrays: [...] or [ ... ] -> []
-    .replace(/\[\s*\.\.\.\s*\]/g, '[]')
-    // Replace trailing ellipsis in arrays: , ... ] -> ]
-    .replace(/,\s*\.\.\.\s*\]/g, ']')
-    // Replace leading/standalone ellipsis in arrays: [ ... , -> [
-    .replace(/\[\s*\.\.\.\s*,/g, '[')
-    // Replace ellipsis in middle of arrays: , ... , -> ,
-    .replace(/,\s*\.\.\.\s*,/g, ',')
-    // Replace trailing ellipsis in objects: , ... } -> }
-    .replace(/,\s*\.\.\.\s*\}/g, '}')
-    // Replace property values that are just ... -> null
-    .replace(/:\s*\.\.\.\s*([,\n\}])/g, ': null$1')
-    // Replace trailing commas before closing brackets or braces
-    .replace(/,\s*([\]\}])/g, '$1')
-    // Remove unescaped control chars (except \r, \n, \t)
-    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '');
-
-  try {
-    return JSON.parse(cleaned);
-  } catch (e2) {
-    const fixedTrailing = cleaned.replace(/,\s*([\]\}])/g, '$1');
-    try {
-      return JSON.parse(fixedTrailing);
-    } catch (e3) {
-      throw new Error(`Model returned invalid JSON (${e2.message}). Please click Re-analyze.`);
-    }
-  }
-}
-
-async function callGroq(prompt, maxTokens = 2048) {
-  if (!S.apiKey) throw new Error('NO_KEY');
-  if (!S.activeModel) throw new Error('No model selected — refresh the page or re-enter your API key.');
-
-  const requestBody = {
-    model: S.activeModel,
-    max_tokens: maxTokens,
-    temperature: 0.3,
-    response_format: { type: "json_object" },
-    messages: [
-      { role: 'system', content: 'You are an AI research assistant. You must always return a strictly valid standard JSON object. Never use ellipses (...), never omit array items, and never use markdown code fences.' },
-      { role: 'user', content: prompt }
-    ],
-  };
-
-  let res = await fetch(GROQ_API, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${S.apiKey}` },
-    body: JSON.stringify(requestBody),
-  });
-
-  // If the model rejects response_format (e.g. older Gemma), retry without it
-  if (!res.ok && res.status === 400) {
-    const errBody = await res.json().catch(() => ({}));
-    if (errBody.error?.message?.includes('response_format')) {
-      delete requestBody.response_format;
-      res = await fetch(GROQ_API, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${S.apiKey}` },
-        body: JSON.stringify(requestBody),
-      });
-    } else {
-      throw new Error(errBody.error?.message || `HTTP ${res.status}`);
-    }
-  }
-
-  if (res.status === 401) { S.apiKeyValid = false; throw new Error('API key invalid or expired.'); }
-  if (!res.ok) {
-    const e = await res.json().catch(() => ({}));
-    throw new Error(e.error?.message || `HTTP ${res.status}`);
-  }
-
-  const data = await res.json();
-  S.apiKeyValid = true;
-  const text = data.choices?.[0]?.message?.content || '';
-  return cleanAndParseJSON(text);
-}
-
-// ── URL parser & Canonicalizer ──────────────────────────────────────
-function parseURL(raw) {
-  try {
-    const url = new URL(raw.trim());
-    const h = url.hostname.replace('www.', '').replace(/^m\./, '');
-    if (h.includes('youtu.be') || h.includes('youtube.com')) {
-      let id=null, type='Video';
-      if (h==='youtu.be') id=url.pathname.slice(1).split('?')[0];
-      else if (url.pathname.includes('/shorts/')) { id=url.pathname.split('/shorts/')[1].split('?')[0]; type='Short'; }
-      else id=url.searchParams.get('v');
-      if (id) {
-        const parsed = { platform:'youtube', id, type, url:raw.trim() };
-        parsed.canonicalKey = `youtube:${id}`;
-        return parsed;
-      }
-    }
-    if (h.includes('instagram.com')) {
-      const m=url.pathname.match(/\/(p|reel|tv)\/([A-Za-z0-9_-]+)/);
-      if (m) {
-        const parsed = { platform:'instagram', id:m[2], type:m[1]==='reel'?'Reel':'Post', url:raw.trim() };
-        parsed.canonicalKey = `instagram:${m[2]}`;
-        return parsed;
-      }
-    }
-    if (h.includes('facebook.com') || h.includes('fb.watch')) {
-      const shareMatch = url.pathname.match(/\/share\/(?:v|r)\/([A-Za-z0-9_-]+)/);
-      const videoMatch = url.pathname.match(/\/(?:watch|videos|reel)\/(?:[^/]+\/)?([A-Za-z0-9_-]+)/);
-      const qv = url.searchParams.get('v');
-      const id = shareMatch?.[1] || videoMatch?.[1] || qv || url.pathname.split('/').filter(Boolean).pop();
-      const type = url.pathname.includes('/reel/') ? 'Reel' : 'Video';
-      if (id) {
-        const parsed = { platform:'facebook', id, type, url:raw.trim() };
-        parsed.canonicalKey = `facebook:${id}`;
-        return parsed;
-      }
-    }
-    if (h.includes('twitter.com')||h.includes('x.com')) {
-      const m=url.pathname.match(/\/status\/(\d+)/);
-      if (m) {
-        const parsed = { platform:'twitter', id:m[1], type:'Post', url:raw.trim() };
-        parsed.canonicalKey = `twitter:${m[1]}`;
-        return parsed;
-      }
-    }
-    if (h.includes('github.com')) {
-      const parts=url.pathname.split('/').filter(Boolean);
-      if (parts.length>=2) {
-        const repoId = parts.slice(0,2).join('/');
-        const parsed = { platform:'github', id:repoId, type:'Repo', url:raw.trim() };
-        parsed.canonicalKey = `github:${repoId.toLowerCase()}`;
-        return parsed;
-      }
-    }
-    const cleanWebUrl = `${url.origin}${url.pathname}`.toLowerCase().replace(/\/+$/, '');
-    return { platform:'web', id:h, type:'Article', url:raw.trim(), canonicalKey:`web:${cleanWebUrl}` };
-  } catch {}
-  return null;
-}
-
-function getCanonicalKey(parsed) {
-  if (!parsed) return null;
-  if (parsed.canonicalKey) return parsed.canonicalKey;
-  if (parsed.platform && parsed.id) return `${parsed.platform}:${parsed.id}`;
-  return parsed.url ? parsed.url.trim().toLowerCase() : null;
+function resolveAssetUrl(rel) {
+  if (!rel) return '';
+  if (rel.startsWith('http://') || rel.startsWith('https://') || rel.startsWith('data:')) return rel;
+  return rel.replace(/^\/+/, '');
 }
 
 function renderMarkdown(str) {
@@ -802,1507 +123,2024 @@ function renderMarkdown(str) {
     .replace(/\*(.*?)\*/g, '<em>$1</em>');
 }
 
-// ── Persistent Deterministic Cache Helpers ─────────────────────────
-function findCachedSummary(parsed) {
-  if (!parsed) return null;
-  const canonicalKey = getCanonicalKey(parsed);
-
-  // 1. Direct match from persistent url-cache
-  if (canonicalKey) {
-    const direct = sg('url-cache:' + canonicalKey);
-    if (direct) return direct;
-  }
-
-  // 2. Search in S.urlSummaries
-  if (Array.isArray(S.urlSummaries)) {
-    const found = S.urlSummaries.find(s => {
-      if (s.canonicalKey && canonicalKey && s.canonicalKey === canonicalKey) return true;
-      if (parsed.id && (s.url || '').includes(parsed.id)) return true;
-      if (s.url && parsed.url && s.url.trim().toLowerCase() === parsed.url.trim().toLowerCase()) return true;
-      return false;
-    });
-    if (found) return found;
-  }
-
-  return null;
-}
-
-function saveSummaryToCache(summary) {
-  if (!summary) return;
-  const parsed = parseURL(summary.url);
-  const canonicalKey = summary.canonicalKey || (parsed ? getCanonicalKey(parsed) : null);
-  if (canonicalKey) {
-    summary.canonicalKey = canonicalKey;
-    ss('url-cache:' + canonicalKey, summary);
-  }
-  const existingIdx = (S.urlSummaries || []).findIndex(s =>
-    (s.canonicalKey && canonicalKey && s.canonicalKey === canonicalKey) ||
-    (s.id && s.id === summary.id) ||
-    (parsed?.id && (s.url || '').includes(parsed.id))
-  );
-  if (existingIdx >= 0) {
-    S.urlSummaries[existingIdx] = summary;
-  } else {
-    S.urlSummaries.unshift(summary);
-  }
-  S.urlSummaries = S.urlSummaries.slice(0, 100);
-  ss('ai-summaries', S.urlSummaries);
-}
-
-function formatSummaryAsMarkdown(s) {
-  if (!s) return '';
-  let md = `# ${s.title || 'Summary'}\n\n`;
-  if (s.overview) {
-    md += `${s.overview}\n\n`;
-  }
-  if (Array.isArray(s.phases) && s.phases.length > 0) {
-    md += `### **Key Phases & Workflow:**\n\n`;
-    s.phases.forEach(p => {
-      const timeStr = p.timeRange ? ` (${p.timeRange})` : (p.timestamp ? ` (${p.timestamp})` : '');
-      md += `* **${p.title || 'Phase'}${timeStr}:** ${p.summary || ''}\n`;
-      if (Array.isArray(p.subPoints) && p.subPoints.length > 0) {
-        p.subPoints.forEach(sp => {
-          md += `    * ${sp}\n`;
-        });
-      }
-    });
-    md += `\n`;
-  } else if (Array.isArray(s.points) && s.points.length > 0) {
-    md += `### **Key Points:**\n\n`;
-    s.points.forEach(p => {
-      const txt = typeof p === 'string' ? p : (p.timestamp ? `**[${p.timestamp}]** ${p.text}` : p.text || '');
-      md += `* ${txt}\n`;
-    });
-    md += `\n`;
-  }
-  if (Array.isArray(s.takeaways) && s.takeaways.length > 0) {
-    md += `### **Key Takeaways:**\n\n`;
-    s.takeaways.forEach(t => {
-      md += `* ${t}\n`;
-    });
-    md += `\n`;
-  }
-  if (s.url) {
-    md += `*Source:* ${s.url}\n`;
-  }
-  return md.trim();
-}
-
-function copySummaryText(btn, id) {
-  let item = S.urlResult?.id === id ? S.urlResult : (S.urlSummaries || []).find(s => s.id === id);
-  if (!item && S.urlResult) item = S.urlResult;
-  if (!item) return;
-  const md = formatSummaryAsMarkdown(item);
-  const markCopied = () => {
-    const orig = btn.innerHTML;
-    btn.innerHTML = '<i class="ti ti-check"></i> Copied!';
-    setTimeout(() => { btn.innerHTML = orig; }, 2000);
+// ── Image Quality Validation Gate ─────────────────────────────────────
+function testLowQualityRejection() {
+  S.qualityAlert = {
+    title: 'Low Quality Image Rejected',
+    filename: 'blurry_sample_150x150.jpg',
+    reason: 'Resolution is too low (150x150px). Minimum required character image resolution is 512x512px (file size 8.4 KB < 15 KB). Low-quality images adversely degrade video rendering. Please upload a crisp, high-resolution portrait.'
   };
-  if (navigator.clipboard?.writeText) {
-    navigator.clipboard.writeText(md).then(markCopied).catch(() => {
-      const ta = document.createElement('textarea');
-      ta.value = md;
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand('copy');
-      document.body.removeChild(ta);
-      markCopied();
-    });
-  } else {
-    const ta = document.createElement('textarea');
-    ta.value = md;
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand('copy');
-    document.body.removeChild(ta);
-    markCopied();
-  }
+  studioLog('❌ REJECTED low-quality image "blurry_sample_150x150.jpg": Resolution too low (150x150px < 512x512px)');
+  render();
 }
 
-function resolveAssetUrl(rel) {
-  if (!rel) return '';
-  if (rel.startsWith('http://') || rel.startsWith('https://') || rel.startsWith('data:')) return rel;
-  
-  const cleanRel = rel.replace(/^\/+/, '');
-  
-  // If hosted under /wise-ai-daily (GitHub Pages)
-  if (typeof location !== 'undefined' && location.pathname && location.pathname.includes('/wise-ai-daily')) {
-    return `/wise-ai-daily/${cleanRel}`;
-  }
-  
-  return `./${cleanRel}`;
-}
+function validateCharacterImage(file) {
+  return new Promise((resolve) => {
+    if (!file.type.startsWith('image/')) {
+      resolve({ valid: false, reason: `File "${file.name}" is not a valid image format.` });
+      return;
+    }
+    // File size check: minimum 15 KB
+    if (file.size < 15 * 1024) {
+      resolve({
+        valid: false,
+        reason: `Image file "${file.name}" is too small (${(file.size / 1024).toFixed(1)} KB). Low quality, pixelated images adversely degrade video rendering. Minimum required file size is 15 KB (recommended > 50 KB).`
+      });
+      return;
+    }
 
-function getPhaseSnapshotUrl(p, youtubeId, idx = 0) {
-  if (!youtubeId) return p?.snapshotUrl ? resolveAssetUrl(p.snapshotUrl) : null;
-  
-  const sec = (typeof p?.seconds === 'number') ? p.seconds : 0;
-  
-  // Exact mapping for known tutorial videos with curated snapshots
-  if (youtubeId === 'PEEBZwGetyc') {
-    if (sec < 60) return resolveAssetUrl('snapshots/PEEBZwGetyc/snap_0.jpg');
-    if (sec < 140) return resolveAssetUrl('snapshots/PEEBZwGetyc/snap_100.jpg');
-    if (sec < 250) return resolveAssetUrl('snapshots/PEEBZwGetyc/snap_170.jpg');
-    if (sec < 400) return resolveAssetUrl('snapshots/PEEBZwGetyc/snap_345.jpg');
-    if (sec < 550) return resolveAssetUrl('snapshots/PEEBZwGetyc/snap_460.jpg');
-    return resolveAssetUrl('snapshots/PEEBZwGetyc/snap_660.jpg');
-  }
-  
-  if (youtubeId === 'Qsi9MeLh95Q') {
-    if (sec < 100) return resolveAssetUrl('snapshots/Qsi9MeLh95Q/snap_65.jpg');
-    if (sec < 200) return resolveAssetUrl('snapshots/Qsi9MeLh95Q/snap_170.jpg');
-    if (sec < 300) return resolveAssetUrl('snapshots/Qsi9MeLh95Q/snap_240.jpg');
-    if (sec < 450) return resolveAssetUrl('snapshots/Qsi9MeLh95Q/snap_360.jpg');
-    return resolveAssetUrl('snapshots/Qsi9MeLh95Q/snap_526.jpg');
-  }
-  
-  if (youtubeId === 'vwLVjHEGGK0') {
-    if (sec < 500) return resolveAssetUrl('snapshots/vwLVjHEGGK0/snap_156.jpg');
-    if (sec < 2000) return resolveAssetUrl('snapshots/vwLVjHEGGK0/snap_689.jpg');
-    return resolveAssetUrl('snapshots/vwLVjHEGGK0/snap_3011.jpg');
-  }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target.result;
+      const img = new Image();
+      img.onload = () => {
+        const w = img.naturalWidth;
+        const h = img.naturalHeight;
+        const minDim = 512;
 
-  if (youtubeId === 'ewgAKF9j__o') {
-    if (sec < 60) return resolveAssetUrl('snapshots/ewgAKF9j__o/snap_0.jpg');
-    if (sec < 120) return resolveAssetUrl('snapshots/ewgAKF9j__o/snap_75.jpg');
-    if (sec < 180) return resolveAssetUrl('snapshots/ewgAKF9j__o/snap_150.jpg');
-    return resolveAssetUrl('snapshots/ewgAKF9j__o/snap_210.jpg');
-  }
-
-  if (p && p.snapshotUrl && !p.snapshotUrl.includes('undefined')) {
-    return resolveAssetUrl(p.snapshotUrl);
-  }
-
-  // Check if a direct file was named snap_${sec}.jpg
-  if (sec !== undefined) {
-    return resolveAssetUrl(`snapshots/${youtubeId}/snap_${sec}.jpg`);
-  }
-  
-  // For other videos without local snapshots, use YouTube scene frame snapshots (1.jpg, 2.jpg, 3.jpg)
-  const frameNum = (idx % 3) + 1;
-  return `https://img.youtube.com/vi/${youtubeId}/${frameNum}.jpg`;
-}
-
-function parseDurationToSeconds(str) {
-  if (!str) return null;
-  const cleaned = String(str).trim();
-  const parts = cleaned.split(':').map(Number);
-  if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-    return parts[0] * 60 + parts[1];
-  }
-  if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
-    return parts[0] * 3600 + parts[1] * 60 + parts[2];
-  }
-  // Check for "4m" or "4m 6s"
-  const mMatch = cleaned.match(/^(\d+)\s*m(?:in)?(?:\s*(\d+)\s*s)?/i);
-  if (mMatch) {
-    return parseInt(mMatch[1], 10) * 60 + (mMatch[2] ? parseInt(mMatch[2], 10) : 0);
-  }
-  return null;
-}
-
-/**
- * Uses the YouTube IFrame Player API to silently read the real video duration.
- * Creates a hidden 1x1 iframe, waits for onReady, grabs getDuration(), destroys it.
- * Resolves with duration in seconds (number) or null on timeout/error.
- */
-function getYouTubeDuration(videoId, timeoutMs = 6000) {
-  return new Promise(resolve => {
-    if (!videoId) { resolve(null); return; }
-
-    // Reuse a loaded YT API if already present
-    const tryCreate = () => {
-      let resolved = false;
-      const container = document.createElement('div');
-      container.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden;pointer-events:none;';
-      document.body.appendChild(container);
-
-      const timer = setTimeout(() => {
-        if (!resolved) { resolved = true; cleanup(); resolve(null); }
-      }, timeoutMs);
-
-      let player;
-      function cleanup() {
-        clearTimeout(timer);
-        try { if (player) player.destroy(); } catch {}
-        try { container.remove(); } catch {}
-      }
-
-      try {
-        player = new YT.Player(container, {
-          videoId,
-          playerVars: { autoplay: 0, controls: 0, mute: 1, disablekb: 1, fs: 0, rel: 0, playsinline: 1 },
-          events: {
-            onReady: (e) => {
-              if (resolved) return;
-              resolved = true;
-              const dur = e.target.getDuration();
-              cleanup();
-              resolve(dur > 0 ? Math.round(dur) : null);
-            },
-            onError: () => {
-              if (!resolved) { resolved = true; cleanup(); resolve(null); }
-            }
-          }
-        });
-      } catch(err) {
-        if (!resolved) { resolved = true; cleanup(); resolve(null); }
-      }
-    };
-
-    if (window.YT && window.YT.Player) {
-      tryCreate();
-    } else {
-      // Load the IFrame API script if not already loading
-      const existing = document.getElementById('yt-iframe-api-script');
-      if (!existing) {
-        const script = document.createElement('script');
-        script.id = 'yt-iframe-api-script';
-        script.src = 'https://www.youtube.com/iframe_api';
-        document.head.appendChild(script);
-      }
-      // Poll until YT.Player is available (max 5s)
-      let polls = 0;
-      const poll = setInterval(() => {
-        polls++;
-        if (window.YT && window.YT.Player) {
-          clearInterval(poll);
-          tryCreate();
-        } else if (polls > 50) {
-          clearInterval(poll);
-          resolve(null);
+        if (w < minDim || h < minDim) {
+          resolve({
+            valid: false,
+            dataUrl,
+            width: w,
+            height: h,
+            reason: `Resolution is too low (${w}x${h}px). Minimum required character image resolution is ${minDim}x${minDim}px. Low-quality images adversely affect story video rendering. Please upload a crisp, high-resolution portrait.`
+          });
+          return;
         }
-      }, 100);
-    }
+
+        const ratio = w / h;
+        if (ratio > 3.0 || ratio < 0.33) {
+          resolve({
+            valid: false,
+            dataUrl,
+            width: w,
+            height: h,
+            reason: `Extreme aspect ratio (${w}x${h}px, ratio ${ratio.toFixed(2)}:1). Please provide a standard portrait or character image.`
+          });
+          return;
+        }
+
+        resolve({ valid: true, dataUrl, width: w, height: h });
+      };
+      img.onerror = () => resolve({ valid: false, reason: `Could not decode image "${file.name}".` });
+      img.src = dataUrl;
+    };
+    reader.onerror = () => resolve({ valid: false, reason: 'Failed to read file.' });
+    reader.readAsDataURL(file);
   });
 }
 
-function formatSecondsToTimestamp(sec) {
-  const m = Math.floor(sec / 60);
-  const s = Math.floor(sec % 60);
-  return `${m}:${s < 10 ? '0' : ''}${s}`;
+// ── Google Drive & Project History Manager ────────────────────────────
+function getProjectHistory() {
+  return sg('wise-studio-history') || [];
 }
 
-function scalePhasesToDuration(phases, targetDurationSec) {
-  if (!phases || !phases.length || !targetDurationSec) return phases;
-  
-  let currentMax = 0;
-  phases.forEach(p => {
-    if (typeof p.seconds === 'number' && p.seconds > currentMax) currentMax = p.seconds;
-    if (p.timeRange) {
-      const parts = p.timeRange.split('-');
-      if (parts[1]) {
-        const sec = parseDurationToSeconds(parts[1]);
-        if (sec && sec > currentMax) currentMax = sec;
-      }
-    }
-  });
+function saveCurrentProjectToHistory() {
+  const history = getProjectHistory();
+  const title = S.studioTopic || 'Untitled Project';
+  const id = 'proj_' + Date.now();
+  const previewThumb = S.studioClips?.[0]?.imageUrl || S.studioCharacters?.[0]?.url || '';
 
-  if (currentMax <= targetDurationSec && currentMax > targetDurationSec * 0.75) {
-    return phases; // Already within realistic bounds
+  const projectEntry = {
+    id,
+    title,
+    style: S.studioStyle,
+    duration: S.studioDuration,
+    aspect: S.studioAspect,
+    numScenes: S.studioScript?.scenes?.length || S.studioClips?.length || 0,
+    timestamp: new Date().toISOString(),
+    formattedDate: new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString(),
+    previewThumb,
+    source: localStorage.getItem('gdrive-access-token') ? 'drive' : 'local',
+    data: {
+      studioStep: S.studioStep,
+      studioTopic: S.studioTopic,
+      studioStyle: S.studioStyle,
+      studioDuration: S.studioDuration,
+      studioAspect: S.studioAspect,
+      studioScript: S.studioScript,
+      studioPrompts: S.studioPrompts,
+      studioCharacters: S.studioCharacters,
+      studioClips: S.studioClips
+    }
+  };
+
+  history.unshift(projectEntry);
+  if (history.length > 30) history.pop();
+  ss('wise-studio-history', history);
+  studioLog(`Project "${title}" saved to history!`);
+
+  if (localStorage.getItem('gdrive-access-token')) {
+    saveProjectToGoogleDrive(projectEntry);
   }
 
-  const ratio = currentMax > 0 ? (targetDurationSec / currentMax) : 1;
-
-  return phases.map((p, i) => {
-    const newStartSec = Math.floor((p.seconds || 0) * ratio);
-    const nextPhase = phases[i + 1];
-    const nextStartSec = nextPhase ? Math.floor((nextPhase.seconds || 0) * ratio) : targetDurationSec;
-    const newRange = `${formatSecondsToTimestamp(newStartSec)} - ${formatSecondsToTimestamp(nextStartSec)}`;
-    return {
-      ...p,
-      seconds: newStartSec,
-      timestamp: formatSecondsToTimestamp(newStartSec),
-      timeRange: newRange
-    };
-  });
+  render();
 }
 
-function adjustSummaryDuration(cardId) {
-  const summary = S.urlSummaries.find(s => (s.id || s.canonicalKey) === cardId) || S.urlResult;
-  if (!summary) return;
+function loadProjectFromHistory(id) {
+  const history = getProjectHistory();
+  const entry = history.find(p => p.id === id);
+  if (!entry || !entry.data) {
+    alert('Project data not found.');
+    return;
+  }
+  Object.assign(S, entry.data);
+  normalizeStudioCharacters();
+  saveStudioState();
+  S.historyModal.open = false;
+  studioLog(`Loaded project "${entry.title}" from history.`);
+  render();
+}
 
-  const currentDur = summary.duration || '';
-  const input = prompt('Enter actual video duration (e.g. 4:06 or 12:30):', currentDur);
-  if (!input) return;
+function deleteProjectFromHistory(id) {
+  if (!confirm('Are you sure you want to delete this project from history?')) return;
+  let history = getProjectHistory();
+  history = history.filter(p => p.id !== id);
+  ss('wise-studio-history', history);
+  render();
+}
 
-  const targetSec = parseDurationToSeconds(input);
-  if (!targetSec || targetSec <= 0) {
-    alert('Please enter a valid duration like 4:06 or 15:30');
+let gdriveTokenClient = null;
+
+function connectGoogleDrive() {
+  const clientId = S.googleClientId || localStorage.getItem('gdrive-client-id');
+  if (!clientId) {
+    const inputId = prompt('Enter your Google Cloud OAuth Client ID (from Google Cloud Console):', '');
+    if (!inputId) return;
+    S.googleClientId = inputId.trim();
+    localStorage.setItem('gdrive-client-id', S.googleClientId);
+  }
+
+  if (typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2) {
+    alert('Google Identity Services library is loading. Please ensure you have internet access and try again.');
     return;
   }
 
-  summary.duration = formatSecondsToTimestamp(targetSec);
-  if (Array.isArray(summary.phases) && summary.phases.length) {
-    summary.phases = scalePhasesToDuration(summary.phases, targetSec);
-  }
-
-  // Update points as well
-  if (Array.isArray(summary.points) && summary.points.length && summary.phases.length) {
-    summary.points = summary.phases.map(p => ({
-      timestamp: p.timestamp || '0:00',
-      seconds: p.seconds || 0,
-      text: `${p.title ? p.title + ': ' : ''}${p.summary || ''}`
-    }));
-  }
-
-  saveSummaryToCache(summary);
-  render();
-}
-
-function toggleAllSnapshots(cardId) {
-  S.showSnapshots = !S.showSnapshots;
-  render();
-}
-
-function togglePhaseSnapshot(cardId, idx) {
-  const key = `${cardId}_${idx}`;
-  S.activeSnapshots[key] = !S.activeSnapshots[key];
-  render();
-}
-
-function playSnapshotMoment(cardId, idx) {
-  const key = `${cardId}_${idx}`;
-  S.activePlayerMoments[key] = true;
-  render();
-}
-
-function closeSnapshotPlayer(cardId, idx) {
-  const key = `${cardId}_${idx}`;
-  delete S.activePlayerMoments[key];
-  render();
-}
-
-function openLightbox(url, title) {
-  S.lightbox = { url, title };
-  render();
-}
-
-function closeLightbox() {
-  S.lightbox = null;
-  render();
-}
-
-function getYouTubeVideoId(r, p) {
-  if (p && p.videoId) return p.videoId;
-  if (r && r.videoId) return r.videoId;
-  if (r && r.canonicalKey && r.canonicalKey.startsWith('youtube:')) {
-    return r.canonicalKey.replace('youtube:', '');
-  }
-  const parsed = parseURL(r?.url || '');
-  if (parsed && parsed.platform === 'youtube' && parsed.id) {
-    return parsed.id;
-  }
-  if (r && r.platform === 'youtube' && r.id && !r.id.startsWith('sum-')) {
-    return r.id;
-  }
-  return null;
-}
-
-function buildLightbox() {
-  if (!S.lightbox) return '';
-  return `
-    <div class="lightbox-overlay" onclick="closeLightbox()">
-      <div class="lightbox-modal" onclick="event.stopPropagation()">
-        <div class="lightbox-header">
-          <span style="font-weight:600;font-size:14px;color:#fff">${S.lightbox.title || 'Key Moment Snapshot'}</span>
-          <button class="btn-ghost" style="color:#fff;border-color:rgba(255,255,255,0.3);padding:2px 8px" onclick="closeLightbox()"><i class="ti ti-x"></i></button>
-        </div>
-        <img src="${S.lightbox.url}" class="lightbox-img" alt="${S.lightbox.title || ''}" />
-      </div>
-    </div>
-  `;
-}
-
-function normalizeSummaryOutput(raw, parsed, cleanTitle, videoAuthor, url) {
-  const res = { ...raw };
-  if (cleanTitle && (!res.title || res.title === 'Video Summary' || res.title === 'Page Summary')) {
-    res.title = cleanTitle;
-  }
-  if (videoAuthor && (!res.source || res.source === 'Creator' || res.source === 'Author')) {
-    res.source = videoAuthor;
-  }
-  res.url = url;
-  res.platform = parsed.platform;
-  res.type = parsed.type;
-  res.date = res.date || TODAY;
-  res.createdAt = res.createdAt || new Date().toISOString();
-  res.id = res.id || ('sum-' + Date.now());
-
-  // Ensure phases array
-  if (!Array.isArray(res.phases)) res.phases = [];
-
-  // Filter out placeholder texts & compute seconds + snapshotUrl
-  const placeholderRegex = /^(opening context|first main point|second main point|third main point|closing takeaway|insight \d|hook|phase name)/i;
-  res.phases = res.phases.filter(p => {
-    const t = (p.title || '').trim();
-    const s = (p.summary || '').trim();
-    return !placeholderRegex.test(t) && !placeholderRegex.test(s);
-  }).map((p, idx) => {
-    let sec = (typeof p.seconds === 'number') ? p.seconds : undefined;
-    if (sec === undefined && p.timestamp) {
-      const parts = String(p.timestamp).split(':').map(Number);
-      if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-        sec = parts[0] * 60 + parts[1];
-      } else if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
-        sec = parts[0] * 3600 + parts[1] * 60 + parts[2];
+  gdriveTokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: S.googleClientId,
+    scope: 'https://www.googleapis.com/auth/drive.file',
+    callback: async (res) => {
+      if (res && res.access_token) {
+        localStorage.setItem('gdrive-access-token', res.access_token);
+        S.googleDriveConnected = true;
+        studioLog('✓ Google Drive connected successfully!');
+        saveCurrentProjectToHistory();
+        render();
       }
     }
-    const finalSec = sec !== undefined ? sec : 0;
-    const yId = (parsed.platform === 'youtube' && parsed.id) ? parsed.id : null;
-    return {
-      ...p,
-      seconds: finalSec,
-      snapshotUrl: getPhaseSnapshotUrl({ ...p, seconds: finalSec }, yId, idx)
-    };
   });
 
-  // Scale phases proportionally if they exceed duration
-  const targetDurationSec = parseDurationToSeconds(S.urlDuration) || parseDurationToSeconds(res.duration);
-  if (targetDurationSec && targetDurationSec > 0 && res.phases.length > 0) {
-    res.duration = formatSecondsToTimestamp(targetDurationSec);
-    res.phases = scalePhasesToDuration(res.phases, targetDurationSec);
-    const yId = (parsed.platform === 'youtube' && parsed.id) ? parsed.id : null;
-    res.phases = res.phases.map((p, idx) => ({
-      ...p,
-      snapshotUrl: getPhaseSnapshotUrl(p, yId, idx)
-    }));
-  }
-
-  // Ensure points array exists for backwards compatibility
-  if (!Array.isArray(res.points) || res.points.length === 0) {
-    if (res.phases.length > 0) {
-      res.points = res.phases.map(p => ({
-        timestamp: p.timestamp || '0:00',
-        seconds: p.seconds || 0,
-        text: `${p.title ? p.title + ': ' : ''}${p.summary || ''}`
-      }));
-    } else {
-      res.points = [];
-    }
-  }
-
-  // Ensure takeaways array
-  if (!Array.isArray(res.takeaways)) res.takeaways = [];
-
-  return res;
+  gdriveTokenClient.requestAccessToken({ prompt: 'consent' });
 }
 
+async function saveProjectToGoogleDrive(projectEntry) {
+  const token = localStorage.getItem('gdrive-access-token');
+  if (!token) return;
 
-// ── Daily digest ─────────────────────────────────────────────────
-async function fetchDigest() {
-  if (!S.apiKey) { S.showSetup=true; render(); return; }
-  S.loading=true; S.loadError=''; render();
-
-  // Pre-fetch real trending stories from free public CORS-enabled feeds
-  let realFeedsContext = '';
   try {
-    const [hnRes, hfRes] = await Promise.allSettled([
-      fetch('https://hn.algolia.com/api/v1/search?query=AI+OR+LLM+OR+GPT&tags=story&hitsPerPage=6'),
-      fetch('https://huggingface.co/api/daily_papers')
-    ]);
+    studioLog('Syncing project package to Google Drive...');
+    const filename = `wise_studio_${(projectEntry.title || 'project').replace(/[^a-z0-9]/gi, '_')}_${Date.now()}.json`;
+    const metadata = {
+      name: filename,
+      mimeType: 'application/json',
+      description: 'Wise Simple Studio AI Story & Video Project'
+    };
 
-    const realItems = [];
-    if (hnRes.status === 'fulfilled' && hnRes.value.ok) {
-      const hnData = await hnRes.value.json();
-      (hnData.hits || []).slice(0, 4).forEach(h => {
-        const u = h.url || `https://news.ycombinator.com/item?id=${h.objectID}`;
-        if (h.title && u) {
-          realItems.push(`- Title: "${h.title}" | Platform: "web" | Source: "Hacker News" | Real URL: ${u}`);
-        }
-      });
-    }
+    const form = new FormData();
+    form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+    form.append('file', new Blob([JSON.stringify(projectEntry, null, 2)], { type: 'application/json' }));
 
-    if (hfRes.status === 'fulfilled' && hfRes.value.ok) {
-      const hfData = await hfRes.value.json();
-      (hfData || []).slice(0, 4).forEach(p => {
-        if (p.title && p.paper?.id) {
-          realItems.push(`- Title: "${p.title}" | Platform: "paper" | Source: "Hugging Face Daily Papers" | Real URL: https://huggingface.co/papers/${p.paper.id}`);
-        }
-      });
-    }
+    const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: form
+    });
 
-    if (realItems.length > 0) {
-      realFeedsContext = `\nREAL VERIFIED STORIES FROM TODAY (Include these with their exact Real URLs):\n${realItems.join('\n')}\n`;
+    if (res.ok) {
+      const driveFile = await res.json();
+      projectEntry.source = 'drive';
+      projectEntry.driveFileId = driveFile.id;
+      const history = getProjectHistory();
+      const idx = history.findIndex(p => p.id === projectEntry.id);
+      if (idx !== -1) {
+        history[idx] = projectEntry;
+        ss('wise-studio-history', history);
+      }
+      studioLog(`✓ Project successfully uploaded to Google Drive! (File ID: ${driveFile.id})`);
+      render();
     }
+  } catch (err) {
+    console.error('Google Drive upload error:', err);
+  }
+}
+
+// ── Studio Persistence ────────────────────────────────────────────────
+function normalizeStudioCharacters() {
+  if (!Array.isArray(S.studioCharacters)) {
+    S.studioCharacters = [];
+    return;
+  }
+  S.studioCharacters.forEach((c, idx) => {
+    if (!c.id) {
+      const desc = (c.description || '').toLowerCase();
+      if (desc.includes('toby')) c.id = 'char_toby';
+      else if (desc.includes('harry')) c.id = 'char_harry';
+      else c.id = 'char_' + (idx + 1) + '_' + Math.random().toString(36).substring(2, 6);
+    }
+    if (!c.name) {
+      const extracted = c.description ? c.description.split(':')[0].trim().replace(/^[^a-zA-Z0-9]+/, '') : '';
+      c.name = extracted || `Character ${idx + 1}`;
+    }
+  });
+}
+
+function saveStudioState() {
+  try {
+    const state = {
+      version: '2.3',
+      studioStep: S.studioStep,
+      studioTopic: S.studioTopic,
+      studioStyle: S.studioStyle,
+      studioDuration: S.studioDuration,
+      studioAspect: S.studioAspect,
+      studioScript: S.studioScript,
+      studioPrompts: S.studioPrompts,
+      studioCharacters: S.studioCharacters,
+      studioClips: S.studioClips
+    };
+    ss('wise-studio-state', state);
+  } catch (_) {}
+}
+
+function restoreStudioState() {
+  try {
+    const saved = sg('wise-studio-state');
+    if (saved && saved.version === '2.3' && saved.studioScript && Array.isArray(saved.studioScript.scenes)) {
+      const charUrls = new Set((saved.studioCharacters || []).map(c => c.url));
+      // Check if clips incorrectly have character portraits instead of distinct scene visuals
+      const hasDuplicateSheets = Array.isArray(saved.studioClips) && saved.studioClips.length > 1 && saved.studioClips.every(c => !c.imageUrl || charUrls.has(c.imageUrl));
+      if (!hasDuplicateSheets) {
+        Object.assign(S, saved);
+        normalizeStudioCharacters();
+        return true;
+      }
+    }
+  } catch (_) {}
+  return false;
+}
+
+// ── Sample Story Loader (7-Minute Kids Epic) ──────────────────────────
+async function loadSampleEpic() {
+  try {
+    S.studioLoading = true;
+    S.studioProgress = 'Loading 7-Minute Kids Epic Story...';
+    render();
+    const res = await fetch('epic_state.json');
+    if (!res.ok) throw new Error('Could not load epic_state.json');
+    const data = await res.json();
+    Object.assign(S, data);
+    normalizeStudioCharacters();
+    saveStudioState();
+    studioLog('Loaded 7-Minute Kids Epic: 12 scenes, character art, and ready clips!');
   } catch (e) {
-    console.warn('Could not pre-fetch live feeds:', e);
+    S.studioError = e.message;
+  }
+  S.studioLoading = false;
+  S.studioProgress = '';
+  render();
+}
+
+// ── Project Import & Export ───────────────────────────────────────────
+function exportStudioJSON() {
+  const data = {
+    studioStep: S.studioStep,
+    studioTopic: S.studioTopic,
+    studioStyle: S.studioStyle,
+    studioDuration: S.studioDuration,
+    studioAspect: S.studioAspect,
+    studioScript: S.studioScript,
+    studioPrompts: S.studioPrompts,
+    studioCharacters: S.studioCharacters,
+    studioClips: S.studioClips
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `wise_studio_${(S.studioTopic || 'project').substring(0, 24).replace(/[^a-z0-9]/gi, '_')}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  studioLog('Project JSON exported!');
+}
+
+function importStudioJSON(event) {
+  const file = event.target?.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (data && data.studioScript) {
+        Object.assign(S, data);
+        normalizeStudioCharacters();
+        saveStudioState();
+        studioLog(`Successfully imported project: ${S.studioTopic || 'Custom Story'}`);
+        render();
+      } else {
+        alert('Invalid Studio Project JSON file.');
+      }
+    } catch (err) {
+      alert('Failed to parse JSON file: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+function exportStudioScript() {
+  if (!S.studioScript) return;
+  const scenes = (S.studioScript.scenes || []).map(sc =>
+    `SCENE ${sc.sceneNum || ''}: ${sc.title || ''} (${sc.duration || 0}s)\n` +
+    `Environment: ${sc.environment || ''}\n` +
+    `Mood: ${sc.mood || ''} | Camera: ${sc.camera || ''}\n` +
+    `Sound Cue: ${sc.soundEffect || 'none'}\n` +
+    `Narration: "${sc.narration || ''}"\n` +
+    (sc.dialogue ? `Dialogue: "${sc.dialogue}"\n` : '')
+  ).join('\n---\n\n');
+
+  const text = `TITLE: ${S.studioTopic}\nSTYLE: ${STUDIO_STYLES[S.studioStyle]?.label || S.studioStyle}\nDURATION: ${S.studioDuration}\n\nCHARACTERS:\n${S.studioScript.mainCharacter || ''}\n\nNARRATOR INTRODUCTION & MORAL:\n${S.studioScript.narrator || ''}\n\n=== SCENE BY SCENE SCRIPT ===\n\n${scenes}`;
+
+  navigator.clipboard.writeText(text).then(() => {
+    studioLog('Full script copied to clipboard!');
+    S.studioProgress = 'Full script copied to clipboard!';
+    render();
+    setTimeout(() => { S.studioProgress = ''; render(); }, 3000);
+  }).catch(() => {
+    prompt('Copy your full script:', text);
+  });
+}
+
+function exportStudioPrompts() {
+  const lines = (S.studioPrompts || []).map((p, i) =>
+    `=== SCENE ${i+1}: ${p.title} ===\nDuration: ${p.duration}s | Camera: ${p.cameraMove}\n\nPROMPT:\n${p.veoPrompt}\n\nNEGATIVE:\n${p.negativePrompt || 'none'}\n`
+  ).join('\n---\n\n');
+
+  const fullText = `AI VIDEO STUDIO — CINEMATIC PROMPTS\nTopic: ${S.studioTopic}\nStyle: ${STUDIO_STYLES[S.studioStyle]?.label || S.studioStyle}\nDuration: ${S.studioDuration}\nAspect: ${S.studioAspect}\n\n${S.studioScript?.mainCharacter && S.studioScript.mainCharacter !== 'none' ? 'CHARACTER: ' + S.studioScript.mainCharacter + '\n\n' : ''}${lines}`;
+
+  navigator.clipboard.writeText(fullText).then(() => {
+    studioLog('All prompts copied to clipboard!');
+    S.studioProgress = 'Prompts copied to clipboard!';
+    render();
+    setTimeout(() => { S.studioProgress = ''; render(); }, 3000);
+  }).catch(() => {
+    prompt('Copy your prompts:', fullText);
+  });
+}
+
+// ── Groq API Client ───────────────────────────────────────────────────
+async function callGroq(prompt, maxTokens = 3000) {
+  if (!S.apiKey) throw new Error('API key missing. Please configure your Groq API key.');
+  if (!S.activeModel) S.activeModel = 'llama-3.3-70b-versatile';
+
+  const requestBody = {
+    model: S.activeModel,
+    max_tokens: maxTokens,
+    temperature: 0.3,
+    response_format: { type: "json_object" },
+    messages: [
+      { role: 'system', content: 'You are an AI screenwriter and video director. You must always return a strictly valid standard JSON object. Never use ellipses (...), never omit array items, and never use markdown code fences.' },
+      { role: 'user', content: prompt }
+    ]
+  };
+
+  let res = await fetch(GROQ_API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${S.apiKey}` },
+    body: JSON.stringify(requestBody)
+  });
+
+  if (!res.ok && res.status === 400) {
+    delete requestBody.response_format;
+    res = await fetch(GROQ_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${S.apiKey}` },
+      body: JSON.stringify(requestBody)
+    });
   }
 
-  const followStr = S.following.length
-    ? '\nAlso include latest content from: ' + S.following.map(f=>`${f.platform} @${f.handle}`).join(', ') + '.'
-    : '';
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error?.message || `Groq API error HTTP ${res.status}`);
+  }
 
-  const prompt = `Today is ${TODAY}. Generate a daily AI news digest of 12 varied trending AI/ML items from the last 24 hours.
-Mix of:
-- Breaking AI model or product announcements (OpenAI, Anthropic, Google, Meta, Mistral, xAI)
-- Trending GitHub repos for AI/ML
-- New research papers (arXiv, Hugging Face)
-- Viral AI posts on X/Twitter
-- YouTube AI videos trending
-- AI startup/funding news
-- Hacker News top AI threads${followStr}
-${realFeedsContext}
-URL GENERATION RULES (CRITICAL):
-1. For items from the REAL VERIFIED STORIES list above, PRESERVE their exact Real URL.
-2. For model/product announcements or news articles without a verified exact URL, ALWAYS use a Google News search URL: "https://news.google.com/search?q=KEYWORDS" (e.g. "https://news.google.com/search?q=Anthropic+Claude+4.5" or "https://news.google.com/search?q=OpenAI+GPT-5").
-3. For GitHub repos: Use "https://github.com/search?q=KEYWORDS&type=repositories" or the exact real repo URL.
-4. For research papers without an exact link: Use "https://arxiv.org/search/?query=KEYWORDS&searchtype=all".
-5. For YouTube videos: Use "https://www.youtube.com/results?search_query=KEYWORDS".
-6. STRICTLY FORBIDDEN: NEVER invent non-existent deep slugs like "https://www.anthropic.com/news/claude-4-5" or fake blog paths that cause 404 errors. Every URL MUST open successfully.
+  const data = await res.json();
+  const raw = data.choices?.[0]?.message?.content || '{}';
+  const clean = raw.replace(/```json/gi, '').replace(/```/g, '').trim();
+  return JSON.parse(clean);
+}
 
-You MUST return exactly 12 items in the "items" array, numbered item-1 to item-12. Do not stop early. Each item needs 3 bullet point key insights.
+// ── Step 0 -> Step 1: Script Generation ───────────────────────────────
+async function generateStudioScript() {
+  if (!S.apiKey) { S.showSetup = true; render(); return; }
+  if (!S.studioTopic.trim()) { S.studioError = 'Enter a story concept first.'; render(); return; }
 
-Return ONLY this JSON:
+  const numScenes = STUDIO_DURATIONS.find(d => d.value === S.studioDuration)?.scenes || 4;
+  S.studioNumScenes = numScenes;
+  S.studioLoading = true;
+  S.studioError = '';
+  S.studioProgress = 'Generating rich scene-by-scene script with Groq...';
+  studioLog('Starting script generation...');
+  render();
+
+  const styleInfo = STUDIO_STYLES[S.studioStyle] || STUDIO_STYLES.kids3d;
+  const isKids = S.studioStyle === 'kids3d' || S.studioStyle === 'anime' || S.studioDuration === '420s' || S.studioTopic.toLowerCase().includes('kids');
+
+  const prompt = `You are a world-class children's storyteller, animation director, and screenwriter specializing in Pixar and Disney-quality animated videos.
+Create a detailed, extremely engaging, and captivating scene-by-scene script.
+
+STORY CONCEPT: "${S.studioTopic.trim()}"
+VISUAL STYLE: ${styleInfo.label} — ${styleInfo.desc}
+TARGET DURATION: ${S.studioDuration === '420s' ? '7 minutes full episodic special' : S.studioDuration.replace('s',' seconds')}
+NUMBER OF SCENES: exactly ${numScenes}
+ASPECT RATIO: ${S.studioAspect}
+${isKids ? 'TARGET AUDIENCE: 5 to 8 years old kids. Tone must be lively, funny, colorful, full of laughter and wonder. Include comical physical gags, entertaining sound effect cues [BOING!], [ZOOM!], [CRUNCH!], [SNORE!], enthusiastic narrator voice, relatable character dialogue, suspenseful twists, and an empowering moral lesson (being clever, disciplined, humble and kind).' : ''}
+
+For EACH scene, provide:
+- "sceneNum": scene number (1 to ${numScenes})
+- "title": short snappy descriptive title (e.g. "The Overconfident Nap", "Toby's Secret Plan")
+- "description": 2-3 sentences describing what happens visually in the animated world
+- "environment": specific setting/location details (vibrant rolling green hills, golden carrot patches, finish line arch)
+- "mood": emotional tone (e.g. "playful", "tense", "hilarious", "triumphant")
+- "lighting": specific lighting setup (e.g. "bright cheerful morning sunlight", "sparkling golden hour rays")
+- "camera": camera movement and lens (e.g. "wide sweeping crane shot", "close-up tracking shot")
+- "narration": 1-2 cheerful, lively spoken sentences for the voiceover narrator suitable for children aged 5-8
+- "dialogue": snappy, funny character spoken line with speaker name (e.g. "Hare: 'Eat my dust, slowpoke!'")
+- "soundEffect": comical sound cue like "[ZOOM!]", "[BOING!]", "[CRUNCH CRUNCH!]", "[WHEEL SPIN!]"
+- "characters": array of character names appearing in this scene
+- "duration": approximate seconds for this scene (total summing up to target duration)
+
+Also provide:
+- "mainCharacter": a detailed physical description of the primary characters (e.g. "Toby: a determined little green tortoise with a polished jade shell and friendly amber eyes; Harry: a lanky brown hare with tall floppy ears and a proud smirk")
+- "narrator": 2-3 sentence inspiring introduction and moral takeaway for the overall video
+
+Return ONLY valid JSON:
 {
-  "fetchedAt": "${new Date().toLocaleTimeString()}",
-  "items": [
+  "mainCharacter": "detailed character descriptions",
+  "narrator": "overall narration and moral",
+  "scenes": [
     {
-      "id": "item-1",
-      "title": "...",
-      "url": "https://...",
-      "platform": "twitter|github|youtube|web|paper|instagram|facebook",
-      "type": "video|article|repo|post|paper|announcement|thread",
-      "source": "author or site name",
-      "importance": "high|medium",
-      "points": ["insight 1", "insight 2", "insight 3"]
+      "sceneNum": 1,
+      "title": "Scene Title",
+      "description": "Visual action",
+      "environment": "Setting details",
+      "mood": "Tone",
+      "lighting": "Lighting",
+      "camera": "Camera move",
+      "narration": "Narrator voice line",
+      "dialogue": "Character spoken line",
+      "soundEffect": "[SFX]",
+      "characters": ["Character 1", "Character 2"],
+      "duration": 35
+    }
+  ]
+}`;
+
+  try {
+    const result = await callGroq(prompt, 3200);
+    (result.scenes || []).forEach(sc => {
+      sc.assignedCharacterId = null;
+    });
+    S.studioScript = result;
+    S.studioStep = 1;
+    saveStudioState();
+    studioLog(`Script generated: ${(result.scenes || []).length} scenes`);
+  } catch (e) {
+    S.studioError = e.message;
+    studioLog('Script generation failed: ' + e.message);
+  }
+  S.studioLoading = false;
+  S.studioProgress = '';
+  render();
+}
+
+// ── Step 1 -> Step 2: Prompt Expansion ────────────────────────────────
+async function expandStudioPrompts() {
+  if (!S.studioScript?.scenes?.length) { S.studioError = 'Generate a script first.'; render(); return; }
+
+  S.studioLoading = true;
+  S.studioError = '';
+  S.studioProgress = 'Expanding scenes into cinematic prompts...';
+  studioLog('Expanding scenes into prompts...');
+  render();
+
+  const styleInfo = STUDIO_STYLES[S.studioStyle] || STUDIO_STYLES.kids3d;
+  const mainChar = S.studioScript.mainCharacter || 'none';
+
+  const prompt = `You are a cinematic AI video prompt engineer specializing in Google Veo 2 and state of the art video generators.
+Convert each scene into a production-ready video generation prompt.
+
+STYLE: ${styleInfo.label} — ${styleInfo.desc}
+ASPECT RATIO: ${S.studioAspect}
+MAIN CHARACTER: ${mainChar}
+
+SCENES:
+${JSON.stringify(S.studioScript.scenes.map(s => ({
+  sceneNum: s.sceneNum,
+  title: s.title,
+  description: s.description,
+  environment: s.environment,
+  mood: s.mood,
+  lighting: s.lighting,
+  camera: s.camera,
+  characters: s.characters,
+  duration: s.duration
+})))}
+
+For EACH scene, provide:
+- "sceneNum": scene number
+- "title": scene title
+- "veoPrompt": detailed cinematic prompt (focus on lighting, motion, camera angle, character expressions, style consistency)
+- "negativePrompt": negative prompt to prevent artifacts
+- "cameraMove": short camera direction (e.g. "Slow pan right", "Orbit tracking shot", "Static push-in")
+- "duration": seconds
+
+Return ONLY valid JSON:
+{
+  "prompts": [
+    {
+      "sceneNum": 1,
+      "title": "Title",
+      "veoPrompt": "Cinematic prompt...",
+      "negativePrompt": "blurry, low quality, distorted",
+      "cameraMove": "Camera motion",
+      "duration": 35
     }
   ]
 }`;
 
   try {
     const result = await callGroq(prompt, 3000);
-    const normalized = normalizeDigest(result);
-    normalized.date = TODAY;
-    S.todayDigest = normalized;
-    ss('digest:'+TODAY, normalized);
-    refreshHistoryDates();
-  } catch(e) {
-    if (e.message==='NO_KEY') S.showSetup=true;
-    else S.loadError = e.message;
-  }
-  S.loading=false; render();
-}
-
-// ── Paste from clipboard & summarize (one tap) ───────────────────
-async function pasteAndSummarize() {
-  if (!S.apiKey) { S.showSetup=true; render(); return; }
-  S.urlError = '';
-  try {
-    const text = await navigator.clipboard.readText();
-    const trimmed = (text || '').trim();
-    if (!trimmed) {
-      S.urlError = 'Clipboard is empty. Copy a link first (Share → Copy Link).';
-      render();
-      return;
-    }
-    // Extract a URL if the clipboard has extra text around it
-    const match = trimmed.match(/https?:\/\/[^\s]+/);
-    const url = match ? match[0] : trimmed;
-    if (!parseURL(url)) {
-      S.urlError = "Clipboard doesn't contain a valid URL.";
-      render();
-      return;
-    }
-    S.urlInput = url;
-    render();
-    await summarizeURL();
+    S.studioPrompts = result.prompts || [];
+    S.studioStep = 2;
+    saveStudioState();
+    studioLog(`Expanded ${S.studioPrompts.length} cinematic prompts.`);
   } catch (e) {
-    S.urlError = 'Could not read clipboard. Your browser may need permission — try pasting manually instead.';
-    render();
+    S.studioError = e.message;
+    studioLog('Prompt expansion failed: ' + e.message);
   }
+  S.studioLoading = false;
+  S.studioProgress = '';
+  render();
 }
 
-// ── Summarise URL (Deterministic with Persistent Caching) ──────────
-async function summarizeURL(forceRefresh = false) {
-  if (!S.apiKey) { S.showSetup=true; render(); return; }
-  const url = S.urlInput.trim();
-  if (!url) { S.urlError='Enter a URL first.'; render(); return; }
-  const parsed = parseURL(url);
-  if (!parsed) { S.urlError="Doesn't look like a valid URL."; render(); return; }
+// ── Step 3: Character Studio & Mandatory Scene Assignment ─────────────
 
-  const canonicalKey = getCanonicalKey(parsed);
+function getUnassignedScenes() {
+  const scenes = S.studioScript?.scenes || [];
+  const charIds = new Set((S.studioCharacters || []).map(c => c.id));
+  return scenes.filter((sc) => !sc.assignedCharacterId || !charIds.has(sc.assignedCharacterId));
+}
 
-  // 1. Check persistent cache FIRST (guarantees identical output on repeated clicks)
-  if (!forceRefresh) {
-    const cached = findCachedSummary(parsed);
-    if (cached) {
-      S.urlError = '';
-      S.urlLoading = false;
-      const cachedResult = { ...cached, isCached: true };
-      S.urlResult = cachedResult;
-      saveSummaryToCache(cachedResult);
-      render();
-      return;
+function assignCharacterToScene(sceneIdx, charId) {
+  if (!S.studioScript?.scenes?.[sceneIdx]) return;
+  S.studioScript.scenes[sceneIdx].assignedCharacterId = charId || null;
+
+  const char = (S.studioCharacters || []).find(c => c.id === charId);
+  if (char && S.studioClips?.[sceneIdx]) {
+    S.studioClips[sceneIdx].characterId = char.id;
+    S.studioClips[sceneIdx].characterName = char.name;
+    S.studioClips[sceneIdx].characterUrl = char.url;
+    if (!S.studioClips[sceneIdx].imageUrl) {
+      S.studioClips[sceneIdx].imageUrl = char.url;
     }
   }
 
-  S.urlLoading=true; S.urlError=''; S.urlResult=null; render();
+  saveStudioState();
+  studioLog(`Scene ${sceneIdx + 1} assigned to ${char ? char.name : 'None'}`);
+  render();
+}
 
-  // Fetch metadata via noembed for accurate title & author
-  let videoMeta = null;
-  if (parsed.platform === 'youtube' || parsed.platform === 'web') {
-    try {
-      const oembedRes = await fetch(`https://noembed.com/embed?url=${encodeURIComponent(url)}`);
-      if (oembedRes.ok) {
-        const odata = await oembedRes.json();
-        if (odata && odata.title) videoMeta = odata;
+function assignCharacterToAllScenes(charId) {
+  if (!S.studioScript?.scenes?.length) return;
+  const char = (S.studioCharacters || []).find(c => c.id === charId);
+  S.studioScript.scenes.forEach((sc, idx) => {
+    sc.assignedCharacterId = charId || null;
+    if (char && S.studioClips?.[idx]) {
+      S.studioClips[idx].characterId = char.id;
+      S.studioClips[idx].characterName = char.name;
+      S.studioClips[idx].characterUrl = char.url;
+      if (!S.studioClips[idx].imageUrl) {
+        S.studioClips[idx].imageUrl = char.url;
       }
-    } catch {}
-  }
-
-  const isVideo = ['youtube','instagram','facebook'].includes(parsed.platform);
-  const rawTitle = videoMeta?.title || '';
-  const cleanTitle = rawTitle.replace(/\s*-\s*YouTube$/i, '').trim();
-  const videoAuthor = videoMeta?.author_name || '';
-
-  // Resolve real duration: user override > auto-detect from YT IFrame API > fallback prompt guidance
-  let userDurationSec = parseDurationToSeconds(S.urlDuration);
-  let detectedDurationSec = null;
-
-  if (!userDurationSec && parsed.platform === 'youtube' && parsed.id) {
-    // Silently load a 1x1 hidden player to get real duration
-    try {
-      detectedDurationSec = await getYouTubeDuration(parsed.id, 6000);
-    } catch {}
-  }
-
-  const resolvedDurationSec = userDurationSec || detectedDurationSec;
-  const resolvedDurationStr = resolvedDurationSec ? formatSecondsToTimestamp(resolvedDurationSec) : null;
-
-  // Compute ideal phase count: 1 phase per ~2.5 minutes, minimum 2, no hard cap
-  const numPhases = resolvedDurationSec
-    ? Math.max(2, Math.round(resolvedDurationSec / 150))
-    : null; // Let model decide if we have no duration info
-
-  const durationInstruction = resolvedDurationSec
-    ? `ACTUAL VIDEO DURATION: ${resolvedDurationStr} (${resolvedDurationSec} seconds total).
-REQUIRED NUMBER OF PHASES: ${numPhases} — one per roughly ${Math.round(resolvedDurationSec / numPhases)} seconds.
-ALL phase timestamps MUST be strictly within 0:00 and ${resolvedDurationStr}.
-The final phase MUST end exactly at ${resolvedDurationStr}.
-Distribute phases evenly across the full runtime — do NOT cluster them all in the first few minutes.
-NEVER generate any timestamp beyond ${resolvedDurationStr}.`
-    : `PHASE SIZING RULES (no duration provided):
-- Infer realistic video length from title, channel and format.
-- Generate one phase per roughly 2-3 minutes of estimated runtime.
-- Every timestamp MUST stay within the estimated video duration.
-- The final phase MUST conclude at the estimated end time.`;
-
-  const prompt = isVideo
-    ? `You are an elite video summarizer and research analyst. Produce an authoritative, comprehensive, deeply technical and highly structured summary of this video:
-URL: ${url}
-Title: "${cleanTitle || 'Video'}"
-${videoAuthor ? `Channel / Creator: "${videoAuthor}"` : ''}
-
-${durationInstruction}
-
-GOAL: Produce an insightful, structured summary that feels like an expert breakdown.
-1. Executive Overview: 2-3 sentences explaining what this video is about, the creator's core methodology or thesis, and who benefits from it.
-2. Key Phases / Chapters: Break down the video into sequential phases matching the actual duration:
-   - "title": Descriptive, meaningful chapter name
-   - "timeRange": e.g. "0:00 - 1:30" (MUST strictly stay within actual video length)
-   - "timestamp": Start timestamp e.g. "0:00"
-   - "seconds": Start time in seconds (integer)
-   - "summary": 2-3 sentences explaining the concepts, tools, or techniques demonstrated
-   - "subPoints": 2-3 specific actionable sub-points, settings, workflows, or rules of thumb mentioned
-3. Key Takeaways: 3-4 bulleted core principles, rules of thumb, or key lessons.
-4. STRICT FORBIDDEN LIST:
-   - NEVER use placeholder text: "opening context", "first main point", "second main point", "hook", "insight 1", "key takeaway", "closing thoughts".
-   - NEVER write vague or empty sentences. Every single point must contain real domain concepts, instructions, or insights.
-   - NEVER use ellipses (...) or placeholder brackets [...] in any array or object. Output strictly valid standard JSON with complete string values.
-
-Return ONLY valid JSON (no markdown fences, no extra text):
-{
-  "title": "${(cleanTitle || 'Video Summary').replace(/"/g, '\\"')}",
-  "platform": "${parsed.platform}",
-  "type": "${parsed.type}",
-  "url": "${url}",
-  "source": "${(videoAuthor || 'Creator').replace(/"/g, '\\"')}",
-  "duration": "${resolvedDurationStr || 'realistic duration e.g. 4:06 or 12:30'}",
-  "overview": "2-3 sentence executive overview of what this video teaches and who it is for",
-  "takeaways": [
-    "Core principle or insight 1",
-    "Core principle or insight 2",
-    "Core principle or insight 3"
-  ],
-  "phases": [
-    {
-      "title": "Phase Name",
-      "timeRange": "0:00 - 1:30",
-      "timestamp": "0:00",
-      "seconds": 0,
-      "summary": "Detailed summary of what happens in this phase without trailing dots",
-      "subPoints": [
-        "Specific actionable detail or technique A",
-        "Specific actionable detail or technique B"
-      ]
     }
-  ]
-}`
-    : `You are an expert research analyst summarizing this ${parsed.platform} publication:
-URL: ${url}
-Title: "${cleanTitle || 'Page'}"
-${videoAuthor ? `Author/Source: "${videoAuthor}"` : ''}
+  });
+  saveStudioState();
+  studioLog(`Assigned "${char ? char.name : 'None'}" to all ${S.studioScript.scenes.length} scenes!`);
+  render();
+}
 
-GOAL: Produce an authoritative, comprehensive summary.
-1. Executive Overview: 2-3 sentences explaining the background, main thesis, and significance.
-2. Key Sections / Topics: 4 to 6 detailed sections, each with a title, summary, and 2-3 specific sub-points.
-3. Key Takeaways: 3-4 actionable insights or conclusions.
-4. FORBIDDEN: Do not use placeholders, generic phrases, ellipses (...), or placeholder brackets [...].
+function autoMatchScriptCharacters() {
+  if (!S.studioScript?.scenes?.length || !S.studioCharacters?.length) return;
+  let matchedCount = 0;
 
-Return ONLY valid JSON (no markdown fences, no extra text):
-{
-  "title": "${(cleanTitle || 'Page Summary').replace(/"/g, '\\"')}",
-  "platform": "${parsed.platform}",
-  "type": "${parsed.type}",
-  "url": "${url}",
-  "source": "${(videoAuthor || 'Author').replace(/"/g, '\\"')}",
-  "overview": "2-3 sentence executive overview of the page content.",
-  "takeaways": [
-    "Actionable takeaway 1",
-    "Actionable takeaway 2",
-    "Actionable takeaway 3"
-  ],
-  "phases": [
-    {
-      "title": "Section Title",
-      "summary": "Detailed section summary explaining key concepts and findings",
-      "subPoints": [
-        "Specific detail 1",
-        "Specific detail 2"
-      ]
-    }
-  ]
-};`;
-
-  try {
-    const rawResult = await callGroq(prompt, 3000);
-    const finalResult = normalizeSummaryOutput(rawResult, parsed, cleanTitle, videoAuthor, url);
-    finalResult.canonicalKey = canonicalKey;
-    finalResult.isCached = true;
-    saveSummaryToCache(finalResult);
-
-    S.urlResult = finalResult;
-  } catch(e) {
-    if (e.message==='NO_KEY') S.showSetup=true;
-    else S.urlError = e.message;
+  if (S.studioCharacters.length === 1) {
+    assignCharacterToAllScenes(S.studioCharacters[0].id);
+    return;
   }
-  S.urlLoading=false; render();
-}
 
-
-function deleteSummary(id) {
-  S.urlSummaries = (S.urlSummaries || []).filter(s => s.id !== id);
-  ss('ai-summaries', S.urlSummaries);
-  render();
-}
-
-// ── History ──────────────────────────────────────────────────────
-function loadHistoryDate(date) {
-  S.historySelected = date;
-  S.historyData = normalizeDigest(sg('digest:'+date));
-  render();
-}
-
-// ── Following ────────────────────────────────────────────────────
-function addHandle() {
-  if (!S.newHandle.trim()) { S.followError='Enter a handle.'; render(); return; }
-  const handle=S.newHandle.trim().replace(/^@/,'');
-  if (S.following.some(f=>f.handle===handle&&f.platform===S.newPlatform)) { S.followError='Already following.'; render(); return; }
-  S.following.push({ platform:S.newPlatform, handle, name:S.newName.trim()||('@'+handle) });
-  S.newHandle=''; S.newName=''; S.followError='';
-  ss('ai-following',S.following); render();
-}
-function removeHandle(i) { S.following.splice(i,1); ss('ai-following',S.following); render(); }
-
-// ── Templates ────────────────────────────────────────────────────
-function ptag(p) { const x=PLATFORMS[p]||PLATFORMS.web; return `<span class="tag ${x.cls}"><i class="ti ${x.icon}" aria-hidden="true"></i> ${x.label}</span>`; }
-
-function renderItems(items) {
-  if (!items?.length) return '<p style="color:var(--text-muted);font-size:14px">No items.</p>';
-  return items.map(item => {
-    const resolvedUrl = resolveItemLink(item);
-    const hub = getOfficialHub(item.url || resolvedUrl, item.source, item.title);
-    const safeTitle = (item.title || 'AI Story').replace(/'/g, "\\'");
-    const safeUrl = resolvedUrl.replace(/'/g, "\\'");
-
-    return `<div class="card" style="margin-bottom:12px">
-      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
-        ${item.importance==='high'?'<span class="tag t-hot"><i class="ti ti-flame"></i> Hot</span>':''}
-        ${ptag(item.platform)}
-        <span class="tag t-type">${item.type||'post'}</span>
-        ${item.source?`<span style="font-size:11px;color:var(--text-muted);margin-left:auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px">${item.source}</span>`:''}
-      </div>
-
-      <a href="${resolvedUrl}" target="_blank" rel="noopener" class="card-title" title="Open verified news and coverage">
-        ${item.title} <i class="ti ti-external-link" style="font-size:12px;color:var(--text-muted)"></i>
-      </a>
-
-      ${(item.points||[]).map(p=>`<div class="bullet"><div class="bullet-dot"></div><span class="bullet-text">${p}</span></div>`).join('')}
-
-      <div style="display:flex;gap:8px;align-items:center;margin-top:10px;padding-top:8px;border-top:1px solid var(--border-color);flex-wrap:wrap">
-        <a href="${resolvedUrl}" target="_blank" rel="noopener" class="btn-ghost" style="font-size:11px;padding:3px 9px;text-decoration:none;display:inline-flex;align-items:center;gap:4px" title="Read coverage on Google News / Source">
-          <i class="ti ti-news"></i> Read Story
-        </a>
-        ${hub ? `
-          <a href="${hub.url}" target="_blank" rel="noopener" class="btn-ghost" style="font-size:11px;padding:3px 9px;text-decoration:none;display:inline-flex;align-items:center;gap:4px" title="Visit official page / newsroom">
-            <i class="ti ti-building"></i> ${hub.label}
-          </a>
-        ` : ''}
-        <button onclick="summarizeResearchedStory('${safeTitle}', '${safeUrl}')" class="btn-ghost" style="font-size:11px;padding:3px 9px;display:inline-flex;align-items:center;gap:4px" title="Summarize in AI Daily">
-          <i class="ti ti-sparkles"></i> Summarize
-        </button>
-      </div>
-    </div>`;
-  }).join('');
-}
-
-function summarizeResearchedStory(title, url) {
-  S.tab = 'add';
-  S.urlInput = url;
-  S.urlError = '';
-  render();
-  if (S.apiKey) {
-    summarizeURL(false);
-  }
-}
-
-// ── Setup modal ──────────────────────────────────────────────────
-function buildSetup() {
-  return `<div class="modal-overlay" onclick="if(event.target===this&&S.apiKey){S.showSetup=false;render()}">
-    <div class="modal">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
-        <div class="logo-mark"><i class="ti ti-brain" style="font-size:21px"></i></div>
-        <div>
-          <div style="font-size:18px;font-weight:700">Connect Groq</div>
-          <div style="font-size:12px;color:var(--text-muted)">Free · Open-source models · No credit card</div>
-        </div>
-      </div>
-      <div class="modal-steps">
-        <div class="modal-step"><div class="step-num">1</div><div class="step-body">Sign up free at <a href="https://console.groq.com" target="_blank">console.groq.com</a> — no credit card needed.</div></div>
-        <div class="modal-step"><div class="step-num">2</div><div class="step-body">Go to <strong>API Keys → Create API Key</strong>. Copy the key starting with <code>gsk_</code></div></div>
-        <div class="modal-step"><div class="step-num">3</div><div class="step-body">Paste it below. Stored only in your browser — never shared.</div></div>
-      </div>
-      <div style="display:flex;gap:8px;margin-bottom:12px">
-        <input class="input-field" type="password" placeholder="gsk_..."
-          value="${S.tempKey}"
-          oninput="S.tempKey=this.value"
-          onkeydown="if(event.key==='Enter')saveKey()" />
-        <button class="btn-primary" onclick="saveKey()"><i class="ti ti-check"></i> Save</button>
-      </div>
-      ${S.loadError?`<div class="error-box"><i class="ti ti-alert-circle"></i> ${S.loadError}</div>`:''}
-      <div class="modal-note">🔒 Key stored in localStorage only. Groq free tier: ~14,400 req/day on open-source models.</div>
-    </div>
-  </div>`;
-}
-
-// ── Tab: Feed ────────────────────────────────────────────────────
-function buildFeed() {
-  const d=S.todayDigest;
-  const ds=new Date(TODAY+'T00:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
-  return `
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:1rem;gap:12px;flex-wrap:wrap">
-      <div><div class="section-label">Today's Digest</div><div style="font-size:16px;font-weight:500">${ds}</div></div>
-      <button class="btn-primary" onclick="fetchDigest()" ${S.loading||S.modelsLoading?'disabled':''}>
-        ${S.loading?`<span class="pulse-dot"></span> Researching…`:`<i class="ti ti-telescope"></i> ${d?'Refresh':'Research Now'}`}
-      </button>
-    </div>
-    ${S.loadError?`<div class="error-box"><i class="ti ti-alert-circle"></i> ${S.loadError}</div>`:''}
-    ${!S.apiKey?`<div class="info-box">
-      <i class="ti ti-key" style="margin-right:6px"></i>
-      Add your free Groq API key to get started.
-      <button class="btn-ghost" style="margin-left:8px;padding:3px 10px;font-size:12px" onclick="S.showSetup=true;render()">Set up →</button>
-    </div>`:''}
-    ${S.modelsLoading?`<div class="loading-row"><span class="pulse-dot"></span> Detecting available models on your account…</div>`:''}
-    ${S.apiKey&&!S.modelsLoading&&!S.activeModel?`<div class="error-box"><i class="ti ti-alert-circle"></i> Could not detect any models — check your API key. <button class="btn-ghost" style="margin-left:8px;padding:3px 10px;font-size:12px" onclick="S.showSetup=true;S.tempKey='';render()">Re-enter key</button></div>`:''}
-    ${S.loading?`<div class="loading-row"><span class="pulse-dot"></span> Searching YouTube · X · GitHub · arXiv · blogs…</div>
-      <div class="skeleton" style="height:100px"></div><div class="skeleton" style="height:80px"></div>
-      <div class="skeleton" style="height:90px"></div><div class="skeleton" style="height:80px"></div>`:''}
-    ${!S.loading&&!d?`<div class="empty-state">
-      <i class="ti ti-robot"></i>
-      <h3>No digest yet for today</h3>
-      <p>Hit <strong>Research Now</strong> to pull today's top AI content from across the web.</p>
-    </div>`:''}
-    ${!S.loading&&d?`
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
-        <span style="font-size:12px;color:var(--text-muted)">Updated ${d.fetchedAt||''} · ${(d.items||[]).length} items</span>
-        ${S.activeModel?`<span class="model-badge">${S.activeModel}</span>`:''}
-      </div>
-      ${renderItems(d.items)}
-    `:''}`;
-}
-
-// ── Tab: Add URL ─────────────────────────────────────────────────
-// ── Tab: Add URL ─────────────────────────────────────────────────
-function buildAdd() {
-  const r = S.urlResult;
-  return `
-    <!-- iPhone Shortcut card -->
-    <div class="card" style="margin-bottom:14px;background:linear-gradient(135deg,rgba(108,63,197,0.12),rgba(168,85,247,0.08));border-color:rgba(108,63,197,0.3)">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-        <div style="width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,#6c3fc5,#a855f7);display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 4px 12px rgba(108,63,197,0.4)">
-          <i class="ti ti-bolt" style="color:#fff;font-size:22px"></i>
-        </div>
-        <div>
-          <div style="font-size:15px;font-weight:700;color:var(--text-primary)">Share from any iPhone app</div>
-          <div style="font-size:12px;color:var(--text-muted)">YouTube · Instagram · Facebook · X · Safari</div>
-        </div>
-      </div>
-      <div style="font-size:13px;color:var(--text-secondary);line-height:1.6;margin-bottom:14px">
-        Install the <strong style="color:var(--text-primary)">AI Daily Shortcut</strong> once — then tap Share → AI Daily in any app and it summarizes automatically.
-      </div>
-      <a href="/wise-ai-daily/shortcut.html"
-         style="display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;background:linear-gradient(135deg,#6c3fc5,#a855f7);color:#fff;border-radius:10px;font-size:14px;font-weight:600;text-decoration:none;box-shadow:0 4px 16px rgba(108,63,197,0.4)">
-        <i class="ti ti-bolt" style="font-size:18px"></i> Install iPhone Shortcut
-      </a>
-      <div style="margin-top:10px;font-size:11px;color:var(--text-muted);text-align:center">Takes 30 seconds · Works with all iOS apps</div>
-    </div>
-
-    <!-- Supported platforms -->
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
-      <span style="font-size:12px;color:var(--text-muted);line-height:26px;margin-right:2px">Works with:</span>
-      <span class="tag t-yt"><i class="ti ti-brand-youtube"></i> YouTube</span>
-      <span class="tag t-ig"><i class="ti ti-brand-instagram"></i> Instagram</span>
-      <span class="tag t-fb"><i class="ti ti-brand-facebook"></i> Facebook</span>
-      <span class="tag t-tw"><i class="ti ti-brand-x"></i> X</span>
-      <span class="tag t-gh"><i class="ti ti-brand-github"></i> GitHub</span>
-      <span class="tag t-web"><i class="ti ti-world"></i> Any URL</span>
-    </div>
-    <!-- One-tap clipboard paste -->
-    <button onclick="pasteAndSummarize()" ${S.urlLoading||S.modelsLoading?'disabled':''}
-      style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:13px;background:var(--surface-2);border:1.5px solid var(--brand);color:var(--brand);border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:14px">
-      <i class="ti ti-clipboard-check" style="font-size:19px"></i> Paste & Summarize
-    </button>
-
-    <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px">Or type/paste a URL manually:</div>
-    <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
-      <input class="input-field" type="url" placeholder="Paste any URL here…"
-        value="${S.urlInput}"
-        oninput="S.urlInput=this.value;S.urlError=''"
-        onkeydown="if(event.key==='Enter')summarizeURL(false)"
-        style="flex:1;min-width:220px" />
-      <input class="input-field" type="text" placeholder="Duration e.g. 4:06 (optional)"
-        value="${S.urlDuration || ''}"
-        oninput="S.urlDuration=this.value"
-        style="width:145px;font-size:12px"
-        title="Specify video duration (optional) so phase timestamps match exactly" />
-      <button class="btn-primary" onclick="summarizeURL(false)" ${S.urlLoading||S.modelsLoading?'disabled':''}>
-        ${S.urlLoading?`<span class="pulse-dot"></span>`:`<i class="ti ti-sparkles"></i>`} Summarize
-      </button>
-    </div>
-    ${S.urlError?`<div class="error-box"><i class="ti ti-alert-circle"></i> ${S.urlError}</div>`:''}
-    ${S.urlLoading?`<div class="loading-row"><span class="pulse-dot"></span> Analyzing content deeply with ${S.activeModel || 'AI'}…</div><div class="skeleton" style="height:180px"></div>`:''}
-    ${r&&!S.urlLoading?renderSummaryCard(r, r.id, { isCurrentResult: true }):''}`;
-}
-
-// ── Summary Card Renderer ─────────────────────────────────────────
-function renderSummaryCard(r, id = null, opts = {}) {
-  if (!r) return '';
-  const isVideo = ['youtube','instagram','facebook'].includes(r.platform);
-  const cardId = id || r.id || ('sum-' + Date.now());
-  const isCurrent = opts.isCurrentResult || false;
-
-  const deleteBtn = (id && !isCurrent) ? `
-    <button class="btn-ghost" style="padding:2px 7px;font-size:11px;color:var(--text-danger)" onclick="deleteSummary('${id}')" title="Delete summary">
-      <i class="ti ti-trash"></i>
-    </button>` : '';
-
-  const rerunBtn = (isCurrent || r.url) ? `
-    <button class="btn-ghost" style="padding:2px 8px;font-size:11px" onclick="S.urlInput='${(r.url || '').replace(/'/g, "\\'")}';summarizeURL(true)" title="Force re-analyze with AI">
-      <i class="ti ti-refresh"></i> Re-analyze
-    </button>` : '';
-
-  const copyBtn = `
-    <button class="btn-ghost" style="padding:2px 8px;font-size:11px" onclick="copySummaryText(this, '${cardId}')" title="Copy full markdown summary">
-      <i class="ti ti-copy"></i> Copy
-    </button>`;
-
-  const hasPhases = Array.isArray(r.phases) && r.phases.length > 0;
-  const hasTakeaways = Array.isArray(r.takeaways) && r.takeaways.length > 0;
-
-  return `<div class="card" style="margin-bottom:14px">
-    <!-- Top badge bar -->
-    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
-      ${ptag(r.platform)}
-      <span class="tag t-type">${r.type || 'Summary'}</span>
-      ${r.source ? `<span style="font-size:11px;color:var(--text-muted)">${r.source}</span>` : ''}
-      ${r.duration ? `<span style="font-size:11px;color:var(--text-muted)">${r.duration}</span>` : ''}
-      <span class="badge-cached"><i class="ti ti-check-double"></i> Saved Analysis</span>
-      ${r.date ? `<span style="font-size:11px;color:var(--text-muted);margin-left:auto">${formatDateLabel(r.date)}</span>` : ''}
-    </div>
-
-    <!-- Title -->
-    <a href="${r.url || '#'}" target="_blank" rel="noopener" class="card-title" style="font-size:15px;font-weight:600;margin-bottom:12px;line-height:1.4">
-      ${r.title || 'Summary'} <i class="ti ti-external-link" style="font-size:12px;color:var(--text-muted)"></i>
-    </a>
-
-    <!-- Executive Overview -->
-    ${r.overview ? `
-      <div class="summary-overview">
-        <div class="overview-label"><i class="ti ti-sparkles"></i> Executive Overview</div>
-        <div class="overview-text">${renderMarkdown(r.overview)}</div>
-      </div>
-    ` : ''}
-
-    <!-- Rich Phases / Milestones with Key Moment Snapshots -->
-    ${hasPhases ? `
-      <div style="display:flex;align-items:center;justify-content:space-between;margin:18px 0 10px 0;flex-wrap:wrap;gap:8px">
-        <div class="phases-title" style="margin:0"><i class="ti ti-timeline"></i> Key Phases & Workflow</div>
-        ${isVideo ? `
-          <button class="btn-snapshot-toggle ${S.showSnapshots ? 'active' : ''}" onclick="toggleAllSnapshots('${cardId}')" title="Toggle visual snapshots for all key moments">
-            <i class="ti ti-camera"></i> <span>${S.showSnapshots ? 'Hide Key Snapshots' : '📸 Show Key Moment Snapshots'}</span>
-          </button>
-        ` : ''}
-      </div>
-      ${r.phases.map((p, idx) => {
-        const timeRange = p.timeRange || p.timestamp || '';
-        const snapshotKey = `${cardId}_${idx}`;
-        const isSnapshotOpen = S.showSnapshots || !!S.activeSnapshots[snapshotKey];
-        const isPlaying = !!S.activePlayerMoments[snapshotKey];
-        const youtubeId = (r.platform === 'youtube') ? getYouTubeVideoId(r, p) : null;
-        const jumpHref = (r.platform === 'youtube' && youtubeId && p.seconds !== undefined) 
-          ? `https://youtu.be/${youtubeId}?t=${p.seconds}` 
-          : (r.url ? `${r.url}&t=${p.seconds}s` : '#');
-        const snapshotImg = getPhaseSnapshotUrl(p, youtubeId, idx);
-        const fallbackFrameUrl = youtubeId ? `https://img.youtube.com/vi/${youtubeId}/${(idx % 3) + 1}.jpg` : '';
-        const displayImg = snapshotImg || fallbackFrameUrl;
-
-        return `<div class="phase-card">
-          <div class="phase-header">
-            ${timeRange ? `<a class="ts-pill" href="${jumpHref}" target="_blank" rel="noopener" title="Jump to timestamp on YouTube"><i class="ti ti-player-play"></i> ${timeRange}</a>` : ''}
-            ${isVideo ? `
-              <button class="ts-pill btn-snapshot-pill ${isSnapshotOpen ? 'active' : ''}" onclick="togglePhaseSnapshot('${cardId}', ${idx})" title="Show/hide snapshot of this key moment">
-                <i class="ti ti-camera"></i> Snapshot
-              </button>
-            ` : ''}
-            <span class="phase-name">${renderMarkdown(p.title || 'Phase')}</span>
-          </div>
-
-          ${(isVideo && isSnapshotOpen) ? `
-            <div class="moment-snapshot-box">
-              ${isPlaying && youtubeId ? `
-                <div class="snapshot-video-wrapper">
-                  <iframe class="snapshot-iframe" src="https://www.youtube.com/embed/${youtubeId}?start=${p.seconds || 0}&autoplay=1" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
-                  <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;padding:4px 8px">
-                    <a href="https://youtu.be/${youtubeId}?t=${p.seconds || 0}" target="_blank" rel="noopener" class="btn-ghost" style="padding:2px 8px;font-size:11px" title="Open directly in YouTube">
-                      <i class="ti ti-external-link"></i> Open on YouTube (${timeRange})
-                    </a>
-                    <button class="btn-ghost" style="padding:2px 8px;font-size:11px" onclick="closeSnapshotPlayer('${cardId}', ${idx})">
-                      <i class="ti ti-x"></i> Close Video
-                    </button>
-                  </div>
-                </div>
-              ` : `
-                <div class="snapshot-media-wrapper">
-                  ${displayImg ? `
-                    <img src="${displayImg}" alt="${p.title}" class="snapshot-img" loading="lazy" onerror="this.onerror=null;this.src='${fallbackFrameUrl}'" onclick="openLightbox('${displayImg}', '${(p.title || '').replace(/'/g, "\\'")}')" />
-                  ` : ''}
-                  <div class="snapshot-overlay">
-                    <span class="snapshot-badge"><i class="ti ti-clock"></i> ${timeRange}</span>
-                    <div style="display:flex;gap:6px">
-                      ${youtubeId ? `
-                        <button class="snapshot-action-btn" onclick="playSnapshotMoment('${cardId}', ${idx})" title="Watch this moment">
-                          <i class="ti ti-player-play"></i> Play Moment
-                        </button>
-                      ` : ''}
-                      ${displayImg ? `
-                        <button class="snapshot-action-btn" onclick="openLightbox('${displayImg}', '${(p.title || '').replace(/'/g, "\\'")}')" title="Zoom snapshot">
-                          <i class="ti ti-zoom-in"></i> Zoom
-                        </button>
-                      ` : ''}
-                    </div>
-                  </div>
-                </div>
-              `}
-              <div class="snapshot-caption">
-                <i class="ti ti-sparkles" style="color:var(--brand)"></i> <span><strong>Key Moment:</strong> ${renderMarkdown(p.title || '')} (${timeRange})</span>
-              </div>
-            </div>
-          ` : ''}
-
-          ${p.summary ? `<div class="phase-summary">${renderMarkdown(p.summary)}</div>` : ''}
-          ${Array.isArray(p.subPoints) && p.subPoints.length ? `
-            <div class="sub-points-list">
-              ${p.subPoints.map(sp => `
-                <div class="sub-bullet-row">
-                  <i class="ti ti-corner-down-right"></i>
-                  <span>${renderMarkdown(sp)}</span>
-                </div>
-              `).join('')}
-            </div>
-          ` : ''}
-        </div>`;
-      }).join('')}
-    ` : ''}
-
-    <!-- Fallback for legacy points if no phases -->
-    ${!hasPhases && Array.isArray(r.points) && r.points.length ? `
-      <div class="phases-title"><i class="ti ti-list"></i> Highlights</div>
-      ${r.points.map(p => {
-        if (typeof p === 'object' && p !== null) {
-          const href = (r.platform === 'youtube' && p.seconds !== undefined) ? `${r.url}&t=${p.seconds}s` : r.url;
-          return `<div class="bullet">
-            <a class="ts-link${r.platform !== 'youtube' ? ' ts-approx' : ''}" href="${href}" target="_blank" rel="noopener">${p.timestamp || '0:00'}</a>
-            <span class="bullet-text">${renderMarkdown(p.text || '')}</span>
-          </div>`;
-        } else {
-          return `<div class="bullet"><div class="bullet-dot"></div><span class="bullet-text">${renderMarkdown(String(p))}</span></div>`;
+  S.studioScript.scenes.forEach((sc, idx) => {
+    if (sc.assignedCharacterId) return;
+    const sceneText = `${sc.title || ''} ${sc.description || ''} ${sc.narration || ''} ${sc.dialogue || ''} ${(sc.characters || []).join(' ')}`.toLowerCase();
+    for (const ch of S.studioCharacters) {
+      const chName = (ch.name || '').toLowerCase();
+      const firstName = chName.split(' ')[0];
+      if ((firstName.length > 2 && sceneText.includes(firstName)) || (chName.length > 2 && sceneText.includes(chName))) {
+        sc.assignedCharacterId = ch.id;
+        if (S.studioClips?.[idx]) {
+          S.studioClips[idx].characterId = ch.id;
+          S.studioClips[idx].characterName = ch.name;
+          S.studioClips[idx].characterUrl = ch.url;
         }
-      }).join('')}
-    ` : ''}
-
-    <!-- Key Takeaways -->
-    ${hasTakeaways ? `
-      <div class="takeaways-card">
-        <div class="takeaways-title"><i class="ti ti-bulb"></i> Core Takeaways & Principles</div>
-        ${r.takeaways.map(t => `
-          <div class="takeaway-item">
-            <i class="ti ti-check"></i>
-            <span>${renderMarkdown(t)}</span>
-          </div>
-        `).join('')}
-      </div>
-    ` : ''}
-
-    <!-- Bottom Actions Toolbar -->
-    <div class="summary-actions">
-      ${copyBtn}
-      ${rerunBtn}
-      ${r.platform === 'youtube' ? `
-        <button class="btn-ghost" style="padding:2px 8px;font-size:11px" onclick="adjustSummaryDuration('${cardId}')" title="Adjust phase timestamps to match actual video duration">
-          <i class="ti ti-clock-edit"></i> Adjust Duration
-        </button>
-      ` : ''}
-      ${deleteBtn}
-      ${r.url ? `<a href="${r.url}" target="_blank" rel="noopener" style="font-size:12px;color:var(--text-muted);margin-left:auto;display:inline-flex;align-items:center;gap:4px">Open original <i class="ti ti-external-link" style="font-size:12px"></i></a>` : ''}
-    </div>
-  </div>`;
-}
-
-// ── Tab: History ─────────────────────────────────────────────────
-function buildHistory() {
-  if (S.historySelected) {
-    const hd = S.historyData;
-    const dt = formatDateLabel(S.historySelected);
-    return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem">
-      <button class="btn-ghost" onclick="S.historySelected=null;S.historyData=null;render()"><i class="ti ti-arrow-left"></i> Back</button>
-      <div style="font-size:15px;font-weight:500">${dt}</div>
-    </div>
-    ${hd ? `<div style="font-size:12px;color:var(--text-muted);margin-bottom:14px">${(hd.items||[]).length} items · ${hd.fetchedAt||''}</div>${renderItems(hd.items)}`
-         : `<div class="error-box"><i class="ti ti-alert-circle"></i> Digest not found.</div>`}`;
-  }
-
-  // Collect all items across all digests
-  const allDigestItems = [];
-  S.historyDates.forEach(date => {
-    const digest = normalizeDigest(sg('digest:' + date));
-    if (digest?.items?.length) {
-      digest.items.forEach(item => {
-        allDigestItems.push({
-          ...item,
-          digestDate: date,
-          isDigest: true,
-        });
-      });
+        matchedCount++;
+        break;
+      }
     }
   });
 
-  const urlSummaries = S.urlSummaries || [];
-  const totalAllCount = allDigestItems.length + urlSummaries.length;
+  saveStudioState();
+  studioLog(`Auto-matched ${matchedCount} scene(s) to characters.`);
+  render();
+}
 
-  // Search filter
-  const q = (S.historySearch || '').trim().toLowerCase();
-  const filterSummary = (s) => {
-    if (!q) return true;
-    const titleMatch = (s.title || '').toLowerCase().includes(q);
-    const sourceMatch = (s.source || '').toLowerCase().includes(q);
-    const overviewMatch = (s.overview || '').toLowerCase().includes(q);
-    const takeawaysMatch = (s.takeaways || []).some(t => (t || '').toLowerCase().includes(q));
-    const phasesMatch = (s.phases || []).some(p =>
-      (p.title || '').toLowerCase().includes(q) ||
-      (p.summary || '').toLowerCase().includes(q) ||
-      (p.subPoints || []).some(sp => (sp || '').toLowerCase().includes(q))
+function deleteStudioCharacter(charId) {
+  const char = (S.studioCharacters || []).find(c => c.id === charId);
+  if (!confirm(`Are you sure you want to delete character "${char?.name || 'this character'}"?`)) return;
+
+  S.studioCharacters = (S.studioCharacters || []).filter(c => c.id !== charId);
+  (S.studioScript?.scenes || []).forEach(sc => {
+    if (sc.assignedCharacterId === charId) {
+      sc.assignedCharacterId = null;
+    }
+  });
+  saveStudioState();
+  studioLog(`Deleted character ${char?.name || charId}`);
+  render();
+}
+
+async function handleCharacterUpload(event) {
+  const files = event.target?.files;
+  if (!files || !files.length) return;
+
+  const fileList = Array.from(files);
+  let accepted = 0;
+  S.qualityAlert = null;
+
+  for (const file of fileList) {
+    const check = await validateCharacterImage(file);
+    if (!check.valid) {
+      S.qualityAlert = {
+        title: 'Low Quality Image Rejected',
+        filename: file.name,
+        reason: check.reason
+      };
+      studioLog(`❌ REJECTED low-quality image "${file.name}": ${check.reason}`);
+      continue;
+    }
+
+    const baseName = file.name.replace(/\.[^/.]+$/, "").replace(/[_-]/g, ' ');
+    const charName = prompt(`Enter Character Name for "${file.name}" (${check.width}x${check.height}px HD):`, baseName) || baseName;
+    const charId = 'char_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+
+    if (!S.studioCharacters) S.studioCharacters = [];
+    S.studioCharacters.push({
+      id: charId,
+      name: charName,
+      url: check.dataUrl,
+      description: `Uploaded character: ${charName} (${check.width}x${check.height}px HD)`
+    });
+    accepted++;
+    studioLog(`✓ Accepted high-quality character image "${charName}" (${check.width}x${check.height}px)`);
+  }
+
+  if (accepted > 0) {
+    autoMatchScriptCharacters();
+    saveStudioState();
+  }
+  if (event.target) event.target.value = '';
+  render();
+}
+
+function handleCharacterDrop(event) {
+  event.preventDefault();
+  event.currentTarget.style.borderColor = '';
+  const dt = event.dataTransfer;
+  if (dt && dt.files && dt.files.length) {
+    handleCharacterUpload({ target: { files: dt.files } });
+  }
+}
+
+async function generateCharacterRef() {
+  const mainChar = S.studioScript?.mainCharacter;
+  if (!mainChar || mainChar === 'none') {
+    S.studioStep = 3;
+    studioLog('No main character description — opening Character Studio.');
+    render();
+    return;
+  }
+
+  S.studioLoading = true;
+  S.studioError = '';
+  S.studioProgress = 'Generating character reference image with AI...';
+  studioLog('Generating character portrait with AI model...');
+  render();
+
+  const styleInfo = STUDIO_STYLES[S.studioStyle] || STUDIO_STYLES.kids3d;
+
+  try {
+    let finalUrl = '';
+    const charName = mainChar.split(':')[0].trim().replace(/^[^a-zA-Z0-9]+/, '') || 'Main Character';
+    const charId = 'char_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
+
+    if (S.googleApiKey) {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${S.googleApiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{ text: `Generate a high-resolution portrait photograph of this character for use as a reference in AI video production. The character must be shown from chest up, looking slightly to the side, with studio lighting.\n\nCharacter: ${mainChar}\nStyle: ${styleInfo.label} — ${styleInfo.desc}\n\nMake the image photorealistic, detailed, with sharp focus on facial features. ${S.studioAspect === '9:16' ? 'Portrait orientation.' : 'Landscape orientation, 16:9.'}` }]
+          }],
+          generationConfig: { responseModalities: ["TEXT", "IMAGE"] }
+        })
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error?.message || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      const parts = data.candidates?.[0]?.content?.parts || [];
+      const imagePart = parts.find(p => p.inlineData);
+      if (imagePart) {
+        finalUrl = `data:${imagePart.inlineData.mimeType};base64,${imagePart.inlineData.data}`;
+      } else {
+        throw new Error('Gemini returned no image');
+      }
+    } else {
+      const promptText = encodeURIComponent(`Character portrait of ${mainChar}, ${styleInfo.label} style, cute 3d pixar disney animation style, vibrant colorful render, friendly expressive face, 8k render, centered studio portrait`);
+      finalUrl = `https://image.pollinations.ai/prompt/${promptText}?width=768&height=768&nologo=true&seed=${Math.floor(Math.random()*100000)}`;
+    }
+
+    if (!S.studioCharacters) S.studioCharacters = [];
+    S.studioCharacters.push({ id: charId, name: charName, url: finalUrl, description: mainChar });
+    autoMatchScriptCharacters();
+    saveStudioState();
+    studioLog(`Character reference "${charName}" created!`);
+    S.studioStep = 3;
+  } catch (e) {
+    const promptText = encodeURIComponent(`Character portrait of ${mainChar}, ${styleInfo.label} style, cute 3d animation, colorful, 8k render`);
+    const finalUrl = `https://image.pollinations.ai/prompt/${promptText}?width=768&height=768&nologo=true&seed=${Math.floor(Math.random()*100000)}`;
+    const charName = mainChar.split(':')[0].trim().replace(/^[^a-zA-Z0-9]+/, '') || 'Main Character';
+    const charId = 'char_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
+
+    if (!S.studioCharacters) S.studioCharacters = [];
+    S.studioCharacters.push({ id: charId, name: charName, url: finalUrl, description: mainChar });
+    autoMatchScriptCharacters();
+    saveStudioState();
+    studioLog('Character created with Free AI fallback.');
+    S.studioStep = 3;
+  }
+  S.studioLoading = false;
+  S.studioProgress = '';
+  render();
+}
+
+// ── Step 4: Clip Generation with Distinct Scene Visuals ──────────────
+async function generateStudioClip(idx) {
+  const promptData = S.studioPrompts?.[idx];
+  const sceneData = S.studioScript?.scenes?.[idx];
+  if (!promptData && !sceneData) return;
+
+  const charId = sceneData?.assignedCharacterId;
+  const assignedChar = (S.studioCharacters || []).find(c => c.id === charId);
+  if (!assignedChar) {
+    S.studioClips[idx] = {
+      sceneIndex: idx,
+      status: 'error',
+      videoUrl: null,
+      imageUrl: null,
+      prompt: promptData?.veoPrompt || sceneData?.description,
+      error: 'Scene missing mandatory character assignment! Please assign a character in Step 3.',
+      cuts: S.studioClips?.[idx]?.cuts || []
+    };
+    render();
+    return;
+  }
+
+  S.studioClips[idx] = {
+    sceneIndex: idx,
+    status: 'generating',
+    videoUrl: null,
+    imageUrl: S.studioClips[idx]?.imageUrl || null,
+    characterId: assignedChar.id,
+    characterName: assignedChar.name,
+    characterUrl: assignedChar.url,
+    prompt: promptData?.veoPrompt || sceneData?.description,
+    error: null,
+    cuts: S.studioClips?.[idx]?.cuts || []
+  };
+  studioLog(`Generating visual for Scene ${idx + 1} (${sceneData?.title || ''}) featuring "${assignedChar.name}"...`);
+  render();
+
+  try {
+    if (S.googleApiKey) {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/veo-2.0-generate-001:predictLongRunning?key=${S.googleApiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          instances: [{ prompt: promptData?.veoPrompt || sceneData?.description }],
+          parameters: { aspectRatio: S.studioAspect, durationSeconds: promptData?.duration || 5, personGeneration: 'allow_adult', numberOfVideos: 1 }
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.name) {
+          S.studioClips[idx].status = 'polling';
+          render();
+          await pollVideoOperation(idx, data.name);
+          return;
+        }
+      }
+    }
+
+    // Generate unique scene-specific visual featuring the assigned character!
+    const styleInfo = STUDIO_STYLES[S.studioStyle] || STUDIO_STYLES.kids3d;
+    const sceneTitle = sceneData?.title || promptData?.title || `Scene ${idx + 1}`;
+    const sceneAction = promptData?.veoPrompt || sceneData?.description || '';
+    const sceneEnv = sceneData?.environment || '';
+
+    const visualPrompt = encodeURIComponent(
+      `${sceneTitle}, featuring character ${assignedChar.name} (${(assignedChar.description || '').substring(0, 80)}), ${sceneAction}, setting in ${sceneEnv}, ${styleInfo.label} visual style, ultra detailed 4k cinematic render, colorful lighting`
     );
-    const pointsMatch = (s.points || []).some(p => {
-      const txt = typeof p === 'string' ? p : (p.text || '');
-      return txt.toLowerCase().includes(q);
-    });
-    return titleMatch || sourceMatch || overviewMatch || takeawaysMatch || phasesMatch || pointsMatch;
-  };
+    const aspectWidth = S.studioAspect === '9:16' ? 576 : (S.studioAspect === '1:1' ? 768 : 1024);
+    const aspectHeight = S.studioAspect === '9:16' ? 1024 : (S.studioAspect === '1:1' ? 768 : 576);
+    const seed = (idx + 1) * 78910 + 12345;
+    const uniqueSceneUrl = `https://image.pollinations.ai/prompt/${visualPrompt}?width=${aspectWidth}&height=${aspectHeight}&nologo=true&seed=${seed}`;
 
-  const filterDigestItem = (it) => {
-    if (!q) return true;
-    const titleMatch = (it.title || '').toLowerCase().includes(q);
-    const sourceMatch = (it.source || '').toLowerCase().includes(q);
-    const pointsMatch = (it.points || []).some(p => {
-      const txt = typeof p === 'string' ? p : (p.text || '');
-      return txt.toLowerCase().includes(q);
-    });
-    return titleMatch || sourceMatch || pointsMatch;
-  };
+    S.studioClips[idx].status = 'done';
+    S.studioClips[idx].imageUrl = uniqueSceneUrl;
+    S.studioClips[idx].characterId = assignedChar.id;
+    S.studioClips[idx].characterName = assignedChar.name;
+    S.studioClips[idx].characterUrl = assignedChar.url;
+    S.studioClips[idx].videoUrl = null;
+    studioLog(`Scene ${idx + 1}: Unique visual generated featuring "${assignedChar.name}"!`);
+    render();
+  } catch (e) {
+    S.studioClips[idx].status = 'error';
+    S.studioClips[idx].error = e.message;
+    studioLog(`Scene ${idx + 1} error: ${e.message}`);
+    render();
+  }
+}
 
-  const filteredSummaries = urlSummaries.filter(filterSummary);
-  const filteredDigestItems = allDigestItems.filter(filterDigestItem);
+async function pollVideoOperation(idx, opName) {
+  const maxAttempts = 60;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    await new Promise(r => setTimeout(r, 5000));
+    try {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/${opName}?key=${S.googleApiKey}`);
+      if (!res.ok) continue;
+      const data = await res.json();
+      if (data.done) {
+        const videoUri = data.response?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri;
+        if (videoUri) {
+          S.studioClips[idx].status = 'done';
+          S.studioClips[idx].videoUrl = videoUri;
+          studioLog(`Clip ${idx + 1}: Generated successfully!`);
+        } else {
+          S.studioClips[idx].status = 'pending-manual';
+          S.studioClips[idx].error = 'Generation completed but no video URL returned.';
+        }
+        render();
+        return;
+      }
+    } catch {}
+  }
+  S.studioClips[idx].status = 'error';
+  S.studioClips[idx].error = 'Polling timed out after 5 minutes.';
+  render();
+}
 
-  const pills = `
-    <div class="filter-pills">
-      <button class="pill-btn ${S.historyFilter==='all'?'active':''}" onclick="S.historyFilter='all';render()">
-        <i class="ti ti-list"></i> All Items (${totalAllCount})
-      </button>
-      <button class="pill-btn ${S.historyFilter==='digests'?'active':''}" onclick="S.historyFilter='digests';render()">
-        <i class="ti ti-calendar"></i> Daily Digests (${S.historyDates.length})
-      </button>
-      <button class="pill-btn ${S.historyFilter==='summaries'?'active':''}" onclick="S.historyFilter='summaries';render()">
-        <i class="ti ti-link"></i> URL Summaries (${urlSummaries.length})
-      </button>
-    </div>
-    <div style="margin-bottom:14px">
-      <input class="input-field" type="search" placeholder="Search all history items, topics, keywords..."
-        value="${S.historySearch}"
-        oninput="S.historySearch=this.value;render()" />
-    </div>
-  `;
+async function generateAllClips() {
+  const unassigned = getUnassignedScenes();
+  if (unassigned.length > 0) {
+    alert(`⚠️ Mandatory Character Assignment Required:\n\n${unassigned.length} scene(s) do not have an assigned character image yet!\nPlease assign a character image to every scene before proceeding.`);
+    S.studioStep = 3;
+    render();
+    return;
+  }
 
-  if (!totalAllCount && !S.historyDates.length) {
-    return `<div class="empty-state">
-      <i class="ti ti-calendar-off"></i>
-      <h3>No history yet</h3>
-      <p>Items will automatically appear here whenever you run a daily digest or summarize a URL.</p>
+  S.studioStep = 4;
+  const numScenes = S.studioPrompts?.length || S.studioScript?.scenes?.length || 0;
+  S.studioClips = Array.from({ length: numScenes }, (_, i) => {
+    const sc = S.studioScript?.scenes?.[i];
+    const ch = (S.studioCharacters || []).find(c => c.id === sc?.assignedCharacterId);
+    const p = S.studioPrompts?.[i];
+    return {
+      sceneIndex: i,
+      status: 'queued',
+      videoUrl: null,
+      imageUrl: S.studioClips?.[i]?.imageUrl || null,
+      characterId: ch?.id,
+      characterName: ch?.name,
+      characterUrl: ch?.url,
+      prompt: p?.veoPrompt || sc?.description || '',
+      error: null,
+      cuts: S.studioClips?.[i]?.cuts || []
+    };
+  });
+  studioLog('Starting batch video generation with distinct scene visuals...');
+  render();
+
+  for (let i = 0; i < numScenes; i++) {
+    S.studioProgress = `Rendering distinct scene ${i + 1} of ${numScenes} featuring assigned characters...`;
+    render();
+    await generateStudioClip(i);
+  }
+  S.studioStep = 5;
+  S.studioProgress = '';
+  saveStudioState();
+  saveCurrentProjectToHistory();
+  studioLog('All clips generated with distinct scene visuals and character consistency!');
+  render();
+}
+
+async function runFullPipeline() {
+  studioLog('=== Full Pipeline Started ===');
+  await generateStudioScript();
+  if (S.studioError) return;
+  await expandStudioPrompts();
+  if (S.studioError) return;
+  await generateCharacterRef();
+  if (S.studioError && !S.studioError.includes('API key')) return;
+  S.studioError = '';
+
+  const unassigned = getUnassignedScenes();
+  if (unassigned.length > 0) {
+    S.studioStep = 3;
+    studioLog(`⚠️ Full Auto paused at Step 3: ${unassigned.length} scene(s) require character assignment.`);
+    render();
+    return;
+  }
+
+  await generateAllClips();
+  studioLog('=== Full Pipeline Complete ===');
+}
+
+// ── Step 5: Timeline & Clip Segment Cutter ────────────────────────────
+function getClipCutTotal(idx) {
+  const cuts = S.studioClips?.[idx]?.cuts || [];
+  return cuts.reduce((acc, c) => acc + Math.max(0, (c.end || 0) - (c.start || 0)), 0);
+}
+
+function getClipEffectiveDuration(idx) {
+  const orig = S.studioScript?.scenes?.[idx]?.duration || S.studioPrompts?.[idx]?.duration || 35;
+  const cutTotal = getClipCutTotal(idx);
+  return Math.max(1, Math.round((orig - cutTotal) * 10) / 10);
+}
+
+function openClipCutModal(idx) {
+  S.clipCutModal = { open: true, clipIndex: idx };
+  render();
+}
+
+function closeClipCutModal() {
+  S.clipCutModal = { open: false, clipIndex: null };
+  render();
+}
+
+function addClipCut(idx, start, end, label) {
+  if (idx == null || !S.studioClips?.[idx]) return;
+  if (!S.studioClips[idx].cuts) S.studioClips[idx].cuts = [];
+  const s = Math.max(0, parseFloat(start) || 0);
+  const e = Math.max(s + 0.1, parseFloat(end) || (s + 0.5));
+  const id = 'cut_' + Date.now();
+  S.studioClips[idx].cuts.push({ id, start: s, end: e, label: label || `Cut ${s}s - ${e}s` });
+  saveStudioState();
+  render();
+}
+
+function removeClipCut(clipIdx, cutId) {
+  if (!S.studioClips?.[clipIdx]?.cuts) return;
+  S.studioClips[clipIdx].cuts = S.studioClips[clipIdx].cuts.filter(c => c.id !== cutId);
+  saveStudioState();
+  render();
+}
+
+function parseAndApplyCutCommand(idx, cmd) {
+  if (!cmd || !cmd.trim()) return;
+  const match = cmd.match(/(\d+(?:\.\d+)?)\s*s?\s*(?:to|-|through)\s*(\d+(?:\.\d+)?)\s*s?/i);
+  if (match) {
+    const s = parseFloat(match[1]);
+    const e = parseFloat(match[2]);
+    addClipCut(idx, s, e, `Trim ${s}s - ${e}s`);
+    studioLog(`Scene ${idx+1}: Applied cut from ${s}s to ${e}s`);
+  } else {
+    alert('Could not parse cut range. Example formats: "remove from 1.1s to 1.6s", "cut 1.1s to 1.6s", or "1.1 to 1.6".');
+  }
+}
+
+function reorderClip(from, to) {
+  if (to < 0 || to >= S.studioClips.length) return;
+  const [item] = S.studioClips.splice(from, 1);
+  S.studioClips.splice(to, 0, item);
+  if (S.studioPrompts.length > from) {
+    const [pItem] = S.studioPrompts.splice(from, 1);
+    S.studioPrompts.splice(to, 0, pItem);
+  }
+  saveStudioState();
+  render();
+}
+
+// ── Step 5 & 6: Interactive Story Player ──────────────────────────────
+let studioPlayerTimer = null;
+let studioAudioCtx = null;
+
+function playStudioTone(freq, duration = 0.3) {
+  if (S.studioPlayerAudioMuted) return;
+  try {
+    if (!studioAudioCtx) studioAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (studioAudioCtx.state === 'suspended') studioAudioCtx.resume();
+    const osc = studioAudioCtx.createOscillator();
+    const gain = studioAudioCtx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(freq, studioAudioCtx.currentTime);
+    gain.gain.setValueAtTime(0.08, studioAudioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, studioAudioCtx.currentTime + duration);
+    osc.connect(gain);
+    gain.connect(studioAudioCtx.destination);
+    osc.start();
+    osc.stop(studioAudioCtx.currentTime + duration);
+  } catch (_) {}
+}
+
+function speakSceneNarration(text) {
+  if (S.studioPlayerAudioMuted || !('speechSynthesis' in window)) return;
+  window.speechSynthesis.cancel();
+  if (!text) return;
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.pitch = 1.15;
+  utter.rate = 1.05;
+  window.speechSynthesis.speak(utter);
+}
+
+function studioPlayerGoTo(idx) {
+  const total = S.studioClips.length || S.studioScript?.scenes?.length || 1;
+  S.studioPlayerCurrentScene = Math.max(0, Math.min(idx, total - 1));
+  const sc = S.studioScript?.scenes?.[S.studioPlayerCurrentScene];
+  if (sc?.narration) speakSceneNarration(sc.narration);
+  playStudioTone(440 + S.studioPlayerCurrentScene * 35, 0.4);
+  render();
+}
+
+function studioPlayerNext() {
+  const total = S.studioClips.length || S.studioScript?.scenes?.length || 1;
+  if (S.studioPlayerCurrentScene < total - 1) {
+    studioPlayerGoTo(S.studioPlayerCurrentScene + 1);
+  } else {
+    studioPlayerPause();
+    studioPlayerGoTo(0);
+  }
+}
+
+function studioPlayerPrev() {
+  if (S.studioPlayerCurrentScene > 0) {
+    studioPlayerGoTo(S.studioPlayerCurrentScene - 1);
+  }
+}
+
+function studioPlayerPlay() {
+  S.studioPlayerPlaying = true;
+  const currentIdx = S.studioPlayerCurrentScene;
+  const sc = S.studioScript?.scenes?.[currentIdx];
+  if (sc?.narration) speakSceneNarration(sc.narration);
+  playStudioTone(523.25, 0.3);
+
+  const durationSec = getClipEffectiveDuration(currentIdx);
+  clearInterval(studioPlayerTimer);
+  studioPlayerTimer = setTimeout(() => {
+    if (S.studioPlayerPlaying) studioPlayerNext();
+  }, Math.max(3000, durationSec * 1000));
+  render();
+}
+
+function studioPlayerPause() {
+  S.studioPlayerPlaying = false;
+  clearTimeout(studioPlayerTimer);
+  if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+  render();
+}
+
+function studioPlayerToggle() {
+  if (S.studioPlayerPlaying) studioPlayerPause();
+  else studioPlayerPlay();
+}
+
+function renderStudioPlayer() {
+  const total = S.studioClips.length || S.studioScript?.scenes?.length || 0;
+  if (!total) return '';
+  const idx = S.studioPlayerCurrentScene;
+  const clip = S.studioClips[idx] || {};
+  const scene = S.studioScript?.scenes?.[idx] || {};
+  const prompt = S.studioPrompts?.[idx] || {};
+  const cuts = clip.cuts || [];
+  const effectiveSec = getClipEffectiveDuration(idx);
+  const mediaUrl = clip.imageUrl ? resolveAssetUrl(clip.imageUrl) : '';
+
+  return `
+    <div class="studio-player-container">
+      <div class="studio-player-screen">
+        ${clip.videoUrl ? `
+          <video src="${clip.videoUrl}" autoplay loop muted playsinline class="studio-player-media"></video>
+        ` : mediaUrl ? `
+          <img src="${mediaUrl}" class="studio-player-media studio-pan-zoom" alt="Scene ${idx+1}" />
+        ` : `
+          <div style="color:var(--text-muted);font-size:16px;display:flex;flex-direction:column;align-items:center;gap:8px">
+            <i class="ti ti-movie-off" style="font-size:36px"></i>
+            <span>No visuals generated yet</span>
+          </div>
+        `}
+
+        ${scene.soundEffect ? `<div class="studio-player-badge"><i class="ti ti-bell"></i> ${scene.soundEffect}</div>` : ''}
+
+        <div class="studio-player-subtitles">
+          <div style="font-size:11px;font-weight:700;color:var(--brand);margin-bottom:2px;letter-spacing:0.5px">SCENE ${idx+1} OF ${total}: ${scene.title || prompt.title || 'Animated Scene'}</div>
+          ${scene.narration ? `"${scene.narration}"` : (clip.prompt || prompt.veoPrompt || '').substring(0, 140)}
+          ${scene.dialogue ? `<div style="color:#f59e0b;font-size:13px;margin-top:4px">💬 ${scene.dialogue}</div>` : ''}
+        </div>
+      </div>
+
+      <div class="studio-player-controls">
+        <div style="display:flex;align-items:center;gap:8px">
+          <button class="btn-ghost" style="padding:6px 12px" onclick="studioPlayerPrev()" ${idx === 0 ? 'disabled' : ''}><i class="ti ti-player-skip-back"></i></button>
+          <button class="btn-primary" style="padding:6px 16px" onclick="studioPlayerToggle()">
+            <i class="ti ${S.studioPlayerPlaying ? 'ti-player-pause' : 'ti-player-play'}"></i> ${S.studioPlayerPlaying ? 'Pause' : 'Play'}
+          </button>
+          <button class="btn-ghost" style="padding:6px 12px" onclick="studioPlayerNext()"><i class="ti ti-player-skip-forward"></i></button>
+          <button class="btn-ghost" style="padding:6px 10px" onclick="studioPlayerGoTo(0)" title="Restart from beginning"><i class="ti ti-rotate-2"></i></button>
+          <button class="btn-ghost" style="padding:6px 10px" onclick="S.studioPlayerAudioMuted=!S.studioPlayerAudioMuted;render()" title="Toggle voiceover & music">
+            <i class="ti ${S.studioPlayerAudioMuted ? 'ti-volume-off' : 'ti-volume'}"></i>
+          </button>
+        </div>
+        <div style="font-size:12px;color:var(--text-secondary);display:flex;align-items:center;gap:12px">
+          <span>Scene ${idx+1} / ${total}</span>
+          <span><strong>${effectiveSec}s</strong>${cuts.length ? ` <span class="studio-cut-pill">${cuts.length} cut(s)</span>` : ''}</span>
+          <button class="btn-ghost" style="font-size:11px;padding:3px 8px" onclick="openClipCutModal(${idx})"><i class="ti ti-scissors"></i> Cut/Trim</button>
+        </div>
+      </div>
+
+      <div class="studio-player-tray">
+        ${Array.from({ length: total }, (_, i) => `
+          <div class="studio-tray-pill ${i === idx ? 'active' : ''}" onclick="studioPlayerGoTo(${i})">
+            <span>${i+1}.</span>
+            <span style="max-width:110px;overflow:hidden;text-overflow:ellipsis">${S.studioScript?.scenes?.[i]?.title || 'Scene ' + (i+1)}</span>
+            <span style="color:var(--text-muted);font-size:10px">${getClipEffectiveDuration(i)}s</span>
+          </div>
+        `).join('')}
+      </div>
     </div>`;
+}
+
+// ── Step 6: Full Movie Video Exporter (Canvas + Web Audio + MediaRecorder) ──
+async function exportFullVideo() {
+  const clips = S.studioClips;
+  if (!clips || !clips.length) {
+    alert('No clips generated to export.');
+    return;
   }
 
-  if (S.historyFilter === 'summaries') {
-    if (!filteredSummaries.length) {
-      return pills + `<div class="empty-state">
-        <i class="ti ti-link-off"></i>
-        <h3>No URL summaries found</h3>
-        <p>${q ? 'No summaries matched your search.' : 'Summarize any YouTube video, article, or post in the "Add URL" tab to save it here.'}</p>
-      </div>`;
-    }
-    return pills + `
-      <div style="font-size:13px;color:var(--text-secondary);margin-bottom:12px">${filteredSummaries.length} saved summar${filteredSummaries.length !== 1 ? 'ies' : 'y'}</div>
-      ${filteredSummaries.map(s => renderSummaryCard(s, s.id)).join('')}
-    `;
-  }
+  S.exportProgressModal = { open: true, progress: 0, currentScene: 1, totalScenes: clips.length, statusText: 'Initializing video compiler...' };
+  render();
 
-  if (S.historyFilter === 'digests') {
-    if (!S.historyDates.length) {
-      return pills + `<div class="empty-state"><i class="ti ti-calendar-off"></i><h3>No digests yet</h3></div>`;
+  try {
+    const width = 1280;
+    const height = 720;
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const dest = audioContext.createMediaStreamDestination();
+    const canvasStream = canvas.captureStream(30);
+    const combinedStream = new MediaStream([
+      ...canvasStream.getVideoTracks(),
+      ...dest.stream.getAudioTracks()
+    ]);
+
+    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus') ? 'video/webm;codecs=vp9,opus' : 'video/webm';
+    const recorder = new MediaRecorder(combinedStream, { mimeType });
+    const chunks = [];
+    recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+
+    const preloadImage = (clip) => new Promise(res => {
+      if (!clip.imageUrl) return res(null);
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => res(img);
+      img.onerror = () => res(null);
+      img.src = resolveAssetUrl(clip.imageUrl);
+    });
+
+    recorder.start();
+
+    for (let i = 0; i < clips.length; i++) {
+      const clip = clips[i];
+      const sc = S.studioScript?.scenes?.[i] || {};
+      const durationSec = Math.min(getClipEffectiveDuration(i), 15);
+
+      S.exportProgressModal = {
+        open: true,
+        progress: Math.round((i / clips.length) * 100),
+        currentScene: i + 1,
+        totalScenes: clips.length,
+        statusText: `Compiling Scene ${i+1} of ${clips.length}: "${sc.title || ''}"...`
+      };
+      render();
+
+      const img = await preloadImage(clip);
+
+      try {
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        osc.frequency.setValueAtTime(220 + i * 40, audioContext.currentTime);
+        gain.gain.setValueAtTime(0.06, audioContext.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + durationSec);
+        osc.connect(gain);
+        gain.connect(dest);
+        osc.start();
+        osc.stop(audioContext.currentTime + durationSec);
+      } catch (_) {}
+
+      const fps = 30;
+      const totalFrames = Math.round(durationSec * fps);
+
+      for (let frame = 0; frame < totalFrames; frame++) {
+        ctx.fillStyle = '#050811';
+        ctx.fillRect(0, 0, width, height);
+
+        if (img) {
+          const progress = frame / totalFrames;
+          const scale = 1.0 + progress * 0.12;
+          const dw = width * scale;
+          const dh = height * scale;
+          const dx = (width - dw) / 2;
+          const dy = (height - dh) / 2;
+          ctx.drawImage(img, dx, dy, dw, dh);
+        }
+
+        const grad = ctx.createLinearGradient(0, height - 200, 0, height);
+        grad.addColorStop(0, 'rgba(0,0,0,0)');
+        grad.addColorStop(1, 'rgba(0,0,0,0.85)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, height - 200, width, 200);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 26px Outfit, Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(`SCENE ${i+1}: ${sc.title || ''}`, width / 2, height - 90);
+
+        ctx.fillStyle = '#e2e8f0';
+        ctx.font = '20px Outfit, Inter, sans-serif';
+        const line = sc.narration ? `"${sc.narration}"` : (clip.prompt || '').substring(0, 80);
+        ctx.fillText(line, width / 2, height - 50);
+
+        if (sc.soundEffect) {
+          ctx.fillStyle = '#f59e0b';
+          ctx.font = 'bold 22px Outfit, Inter, sans-serif';
+          ctx.textAlign = 'right';
+          ctx.fillText(sc.soundEffect, width - 40, 60);
+        }
+
+        await new Promise(r => setTimeout(r, 1000 / fps));
+      }
     }
-    return pills + `
-      <div style="font-size:13px;color:var(--text-secondary);margin-bottom:12px">${S.historyDates.length} digest${S.historyDates.length !== 1 ? 's' : ''} stored</div>
-      ${S.historyDates.map(date => {
-        const dData = normalizeDigest(sg('digest:' + date));
-        const count = (dData?.items || []).length;
-        const dt = formatDateLabel(date);
-        const isToday = date === TODAY;
-        return `<div class="history-row" onclick="loadHistoryDate('${date}')">
-          <div>
-            <div style="font-size:14px;font-weight:500;display:flex;align-items:center;gap:6px">
-              ${dt}
-              ${isToday ? '<span class="model-badge">Current</span>' : ''}
+
+    S.exportProgressModal.statusText = 'Finalizing movie encoding...';
+    S.exportProgressModal.progress = 100;
+    render();
+
+    await new Promise(r => setTimeout(r, 500));
+    recorder.stop();
+
+    await new Promise(resolve => {
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `wise_movie_${(S.studioTopic || 'story').substring(0,24).replace(/[^a-z0-9]/gi, '_')}.webm`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        resolve();
+      };
+    });
+
+    S.exportProgressModal.open = false;
+    saveCurrentProjectToHistory();
+    render();
+    studioLog('Full movie export downloaded successfully!');
+  } catch (err) {
+    alert('Movie export failed: ' + err.message);
+    S.exportProgressModal.open = false;
+    render();
+  }
+}
+
+// ── Modals Markup ─────────────────────────────────────────────────────
+function renderClipCutModal() {
+  if (!S.clipCutModal.open) return '';
+  const idx = S.clipCutModal.clipIndex;
+  const clip = S.studioClips[idx];
+  if (!clip) return '';
+  const sc = S.studioScript?.scenes?.[idx] || {};
+  const cuts = clip.cuts || [];
+  const effectiveSec = getClipEffectiveDuration(idx);
+  const origSec = sc.duration || 35;
+
+  return `
+    <div class="modal-overlay" onclick="if(event.target===this)closeClipCutModal()">
+      <div class="modal-box">
+        <div class="modal-header">
+          <div class="modal-title"><i class="ti ti-scissors" style="color:#ef4444"></i> Cut / Trim Scene ${idx+1}</div>
+          <button class="modal-close" onclick="closeClipCutModal()">&times;</button>
+        </div>
+        <div style="font-size:13px;color:var(--text-secondary);margin-bottom:12px">
+          <strong>${sc.title || 'Scene ' + (idx+1)}</strong> &mdash; Original: ${origSec}s | Current Duration: <strong style="color:var(--text-success)">${effectiveSec}s</strong>
+        </div>
+        ${clip.imageUrl ? `<img src="${resolveAssetUrl(clip.imageUrl)}" style="width:100%;height:140px;object-fit:cover;border-radius:8px;margin-bottom:12px" />` : ''}
+
+        <div class="section-label" style="margin-bottom:6px">Natural Language Cut Command</div>
+        <div style="display:flex;gap:8px;margin-bottom:14px">
+          <input type="text" id="studio-cut-cmd-input" class="input-field" placeholder="e.g. remove from 1.1s to 1.6s, or cut 2s to 5s" onkeydown="if(event.key==='Enter'){parseAndApplyCutCommand(${idx}, this.value);this.value='';}" />
+          <button class="btn-primary" style="padding:8px 14px" onclick="const el=document.getElementById('studio-cut-cmd-input');parseAndApplyCutCommand(${idx}, el.value);el.value='';"><i class="ti ti-check"></i> Apply</button>
+        </div>
+
+        <div class="section-label" style="margin-bottom:6px">Manual Cut Time Interval</div>
+        <div style="display:flex;gap:8px;margin-bottom:14px;align-items:center">
+          <input type="number" id="manual-cut-start" class="input-field" placeholder="Start (s)" step="0.1" min="0" style="width:100px" />
+          <span style="color:var(--text-muted)">to</span>
+          <input type="number" id="manual-cut-end" class="input-field" placeholder="End (s)" step="0.1" min="0.1" style="width:100px" />
+          <button class="btn-ghost" onclick="const s=document.getElementById('manual-cut-start').value;const e=document.getElementById('manual-cut-end').value;if(s&&e){addClipCut(${idx}, s, e);document.getElementById('manual-cut-start').value='';document.getElementById('manual-cut-end').value='';}">Add Cut</button>
+        </div>
+
+        <div class="section-label" style="margin-bottom:6px">Active Cuts on this Scene (${cuts.length})</div>
+        ${cuts.length ? `
+          <div style="display:flex;flex-direction:column;gap:6px">
+            ${cuts.map(c => `
+              <div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface-2);padding:8px 12px;border-radius:6px;font-size:12px">
+                <span class="studio-cut-pill"><i class="ti ti-scissors"></i> ${c.label || `${c.start}s - ${c.end}s`}</span>
+                <span style="color:var(--text-muted);font-size:11px">-${Math.round((c.end - c.start)*10)/10}s deducted</span>
+                <button class="btn-ghost" style="padding:2px 6px;color:#ef4444" onclick="removeClipCut(${idx}, '${c.id}')"><i class="ti ti-trash"></i></button>
+              </div>
+            `).join('')}
+          </div>
+        ` : `
+          <div style="font-size:12px;color:var(--text-muted);padding:8px;background:var(--surface-2);border-radius:6px">No cuts applied yet. Full scene will play.</div>
+        `}
+      </div>
+    </div>`;
+}
+
+function renderExportProgressModal() {
+  if (!S.exportProgressModal.open) return '';
+  const { progress, currentScene, totalScenes, statusText } = S.exportProgressModal;
+  return `
+    <div class="modal-overlay">
+      <div class="modal-box" style="text-align:center">
+        <div style="font-size:36px;color:var(--brand);margin-bottom:8px"><i class="ti ti-movie studio-spin"></i></div>
+        <div style="font-size:18px;font-weight:700;color:var(--text-primary);margin-bottom:6px">Compiling Entire Movie</div>
+        <div style="font-size:13px;color:var(--text-secondary);margin-bottom:12px">${statusText}</div>
+        <div class="progress-bar-container">
+          <div class="progress-bar-fill" style="width:${progress}%"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted)">
+          <span>Scene ${currentScene} of ${totalScenes}</span>
+          <span>${progress}%</span>
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderLightbox() {
+  if (!S.lightbox.open) return '';
+  return `
+    <div class="modal-overlay" onclick="S.lightbox.open=false;render()">
+      <div style="max-width:90vw;max-height:90vh;position:relative">
+        <img src="${S.lightbox.url}" style="max-width:100%;max-height:85vh;border-radius:8px;display:block" />
+        <div style="color:#fff;text-align:center;margin-top:8px;font-weight:600">${S.lightbox.title}</div>
+      </div>
+    </div>`;
+}
+
+function openLightbox(url, title) {
+  S.lightbox = { open: true, url, title };
+  render();
+}
+
+function renderHistoryModal() {
+  if (!S.historyModal.open) return '';
+  const history = getProjectHistory();
+  const driveToken = localStorage.getItem('gdrive-access-token');
+
+  return `
+    <div class="modal-overlay" onclick="if(event.target===this){S.historyModal.open=false;render();}">
+      <div class="modal-box" style="max-width:760px">
+        <div class="modal-header">
+          <div class="modal-title">
+            <i class="ti ti-history" style="color:var(--brand)"></i>
+            Project History & Cloud Storage
+          </div>
+          <button class="modal-close" onclick="S.historyModal.open=false;render()">&times;</button>
+        </div>
+
+        <!-- Google Drive Connection Bar -->
+        <div style="background:var(--surface-2);border-radius:var(--radius-md);padding:14px;display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+          <div style="display:flex;align-items:center;gap:10px">
+            <i class="ti ti-brand-google-drive" style="font-size:26px;color:#4285f4"></i>
+            <div>
+              <div style="font-weight:600;font-size:13px;color:var(--text-primary)">
+                ${driveToken ? '✓ Google Drive Connected' : 'Google Drive Cloud Sync'}
+              </div>
+              <div style="font-size:11px;color:var(--text-muted)">
+                ${driveToken ? 'Projects and character assets sync directly to your Drive' : 'Connect your Google Drive to back up projects & character assets to the cloud'}
+              </div>
             </div>
-            <div style="font-size:12px;color:var(--text-muted);margin-top:3px">${count} news items · ${dData?.fetchedAt || 'Saved'}</div>
           </div>
-          <div style="display:flex;align-items:center;gap:6px">
-            <span style="font-size:12px;color:var(--brand);font-weight:500">View items</span>
-            <i class="ti ti-chevron-right" style="color:var(--text-muted)"></i>
-          </div>
-        </div>`;
-      }).join('')}
-    `;
-  }
-
-  // S.historyFilter === 'all'
-  const hasMatches = filteredSummaries.length > 0 || filteredDigestItems.length > 0;
-  if (!hasMatches) {
-    return pills + `<div class="empty-state">
-      <i class="ti ti-search"></i>
-      <h3>No items matched "${S.historySearch}"</h3>
-      <p>Try searching for a different keyword or clear the search box.</p>
-    </div>`;
-  }
-
-  let html = pills;
-  if (filteredSummaries.length) {
-    html += `
-      <div class="section-label" style="display:flex;align-items:center;gap:6px;margin-top:6px">
-        <i class="ti ti-sparkles" style="color:var(--brand)"></i> Summarized Videos & Links (${filteredSummaries.length})
-      </div>
-      ${filteredSummaries.map(s => renderSummaryCard(s, s.id)).join('')}
-    `;
-  }
-
-  if (filteredDigestItems.length) {
-    html += `
-      <div class="section-label" style="display:flex;align-items:center;gap:6px;margin-top:16px">
-        <i class="ti ti-newspaper" style="color:var(--brand)"></i> Daily Digest News Items (${filteredDigestItems.length})
-      </div>
-      ${filteredDigestItems.map(item => {
-        const resolvedUrl = resolveItemLink(item);
-        const hub = getOfficialHub(item.url || resolvedUrl, item.source, item.title);
-        const safeTitle = (item.title || 'AI Story').replace(/'/g, "\\'");
-        const safeUrl = resolvedUrl.replace(/'/g, "\\'");
-
-        return `<div class="card" style="margin-bottom:12px">
-          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
-            <span class="tag t-type" style="font-size:10px">${formatDateLabel(item.digestDate)}</span>
-            ${item.importance === 'high' ? '<span class="tag t-hot"><i class="ti ti-flame"></i> Hot</span>' : ''}
-            ${ptag(item.platform)}
-            <span class="tag t-type">${item.type || 'post'}</span>
-            ${item.source ? `<span style="font-size:11px;color:var(--text-muted);margin-left:auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px">${item.source}</span>` : ''}
-          </div>
-          <a href="${resolvedUrl}" target="_blank" rel="noopener" class="card-title">
-            ${item.title} <i class="ti ti-external-link" style="font-size:12px;color:var(--text-muted)"></i>
-          </a>
-          ${(item.points || []).map(p => {
-            const txt = typeof p === 'string' ? p : (p.text || '');
-            return `<div class="bullet"><div class="bullet-dot"></div><span class="bullet-text">${txt}</span></div>`;
-          }).join('')}
-          <div style="display:flex;gap:8px;align-items:center;margin-top:10px;padding-top:8px;border-top:1px solid var(--border-color);flex-wrap:wrap">
-            <a href="${resolvedUrl}" target="_blank" rel="noopener" class="btn-ghost" style="font-size:11px;padding:3px 9px;text-decoration:none;display:inline-flex;align-items:center;gap:4px">
-              <i class="ti ti-news"></i> Read Story
-            </a>
-            ${hub ? `
-              <a href="${hub.url}" target="_blank" rel="noopener" class="btn-ghost" style="font-size:11px;padding:3px 9px;text-decoration:none;display:inline-flex;align-items:center;gap:4px">
-                <i class="ti ti-building"></i> ${hub.label}
-              </a>
-            ` : ''}
-            <button onclick="summarizeResearchedStory('${safeTitle}', '${safeUrl}')" class="btn-ghost" style="font-size:11px;padding:3px 9px;display:inline-flex;align-items:center;gap:4px">
-              <i class="ti ti-sparkles"></i> Summarize
+          <div style="display:flex;gap:8px">
+            ${!driveToken ? `
+              <button class="btn-primary" style="padding:6px 14px;font-size:12px;background:linear-gradient(135deg,#4285f4,#34a853)" onclick="connectGoogleDrive()">
+                <i class="ti ti-login"></i> Connect Google Drive
+              </button>
+            ` : `
+              <button class="btn-ghost" style="padding:6px 12px;font-size:11px" onclick="localStorage.removeItem('gdrive-access-token');S.googleDriveConnected=false;render()">Disconnect</button>
+            `}
+            <button class="btn-primary" style="padding:6px 14px;font-size:12px" onclick="saveCurrentProjectToHistory()">
+              <i class="ti ti-device-floppy"></i> Save Current Project
             </button>
           </div>
-        </div>`;
-      }).join('')}
-    `;
-  }
-
-  return html;
-}
-
-// ── Tab: Following ───────────────────────────────────────────────
-function buildFollowing() {
-  const ptOpts=Object.entries(PLATFORMS).map(([k,v])=>`<option value="${k}" ${k===S.newPlatform?'selected':''}>${v.label}</option>`).join('');
-  return `<div style="font-size:13px;color:var(--text-secondary);margin-bottom:16px;line-height:1.6">Add accounts to track — they'll be prioritised in every daily digest.</div>
-  <div class="card" style="margin-bottom:1.5rem">
-    <div class="section-label">Add account</div>
-    <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
-      <select class="select-field" onchange="S.newPlatform=this.value" style="min-width:120px">${ptOpts}</select>
-      <input class="input-field" placeholder="@handle or username" value="${S.newHandle}"
-        oninput="S.newHandle=this.value;S.followError=''"
-        onkeydown="if(event.key==='Enter')addHandle()"
-        style="flex:1;min-width:130px" />
-    </div>
-    <div style="display:flex;gap:8px;margin-bottom:8px">
-      <input class="input-field" placeholder="Display name (optional)" value="${S.newName}" oninput="S.newName=this.value" style="flex:1" />
-      <button class="btn-primary" onclick="addHandle()"><i class="ti ti-plus"></i> Add</button>
-    </div>
-    ${S.followError?`<div class="error-box"><i class="ti ti-alert-circle"></i> ${S.followError}</div>`:''}
-  </div>
-  ${!S.following.length?`<div style="text-align:center;padding:1.5rem;color:var(--text-muted);font-size:14px">No accounts followed yet.</div>`:''}
-  ${S.following.map((f,i)=>{const p=PLATFORMS[f.platform]||PLATFORMS.web;return `<div class="handle-row">
-    <div style="display:flex;align-items:center;gap:12px">
-      <span class="tag ${p.cls}"><i class="ti ${p.icon}"></i></span>
-      <div><div style="font-size:14px;font-weight:500">${f.name}</div><div style="font-size:12px;color:var(--text-muted)">@${f.handle} · ${p.label}</div></div>
-    </div>
-    <button class="btn-ghost" onclick="removeHandle(${i})"><i class="ti ti-x"></i></button>
-  </div>`;}).join('')}`;
-}
-
-// ── Main render ──────────────────────────────────────────────────
-function render() {
-  const tabs=[
-    {id:'feed',      icon:'ti-home',    label:'Feed'},
-    {id:'add',       icon:'ti-link',    label:'Add URL'},
-    {id:'history',   icon:'ti-history', label:'History'},
-    {id:'following', icon:'ti-users',   label:'Following'},
-  ];
-
-  const statusCls = !S.apiKey?'':S.apiKeyValid===false?'err':'ok';
-  const statusTxt = !S.apiKey
-    ? '<i class="ti ti-key"></i> Set up API key'
-    : S.apiKeyValid===false
-      ? '<i class="ti ti-alert-circle"></i> Key invalid'
-      : '<i class="ti ti-circle-check"></i> Groq connected';
-
-  const modelSel = S.availableModels.length ? `
-    <select class="select-field" title="Active model"
-      onchange="changeModel(this.value)"
-      style="font-size:11px;height:28px;padding:0 8px;border-radius:6px;max-width:200px">
-      ${S.availableModels.map(m=>`<option value="${m}" ${m===S.activeModel?'selected':''}>${m}</option>`).join('')}
-    </select>` : S.modelsLoading ? `<span style="font-size:11px;color:var(--text-muted)">Loading models…</span>` : '';
-
-  let content='';
-  if      (S.tab==='feed')      content=buildFeed();
-  else if (S.tab==='add')       content=buildAdd();
-  else if (S.tab==='history')   content=buildHistory();
-  else if (S.tab==='following') content=buildFollowing();
-
-  document.getElementById('app').innerHTML = `
-    ${S.showSetup?buildSetup():''}
-    ${buildLightbox()}
-    <div class="shell">
-      <header class="header">
-        <div class="logo-mark"><i class="ti ti-brain"></i></div>
-        <div>
-          <div class="logo-name">AI Daily</div>
-          <div class="logo-sub">Open-source · Groq</div>
         </div>
-        <div class="header-right">
-          ${modelSel}
-          <button class="api-status ${statusCls}" onclick="S.showSetup=true;S.tempKey='';render()">${statusTxt}</button>
-        </div>
-      </header>
-      <nav class="tabs" role="tablist">
-        ${tabs.map(t=>`<button class="tab ${S.tab===t.id?'active':''}" onclick="S.tab='${t.id}';render()"><i class="ti ${t.icon}"></i>${t.label}</button>`).join('')}
-      </nav>
-      <main>${content}</main>
+
+        <div class="section-label" style="margin-bottom:8px">Saved Projects (${history.length})</div>
+        ${history.length ? `
+          <div class="history-grid">
+            ${history.map(proj => `
+              <div class="history-card">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:6px">
+                  <span class="cloud-badge ${proj.source === 'drive' ? 'drive' : 'local'}">
+                    <i class="ti ${proj.source === 'drive' ? 'ti-cloud' : 'ti-device-floppy'}"></i> ${proj.source === 'drive' ? 'Google Drive' : 'Local Storage'}
+                  </span>
+                  <span style="font-size:10px;color:var(--text-muted)">${proj.formattedDate || ''}</span>
+                </div>
+
+                ${proj.previewThumb ? `
+                  <img src="${resolveAssetUrl(proj.previewThumb)}" style="width:100%;height:120px;object-fit:cover;border-radius:6px;background:#000" />
+                ` : ''}
+
+                <div>
+                  <div style="font-size:13px;font-weight:700;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${proj.title}</div>
+                  <div style="font-size:11px;color:var(--text-muted);margin-top:2px">
+                    ${proj.numScenes || 0} Scenes &bull; ${proj.duration || '420s'} &bull; Style: ${proj.style || 'kids3d'}
+                  </div>
+                </div>
+
+                <div style="display:flex;gap:6px;margin-top:auto">
+                  <button class="btn-primary" style="flex:1;padding:6px 10px;font-size:12px" onclick="loadProjectFromHistory('${proj.id}')">
+                    <i class="ti ti-folder-open"></i> Load
+                  </button>
+                  <button class="btn-ghost" style="padding:6px 10px;color:#ef4444;font-size:12px" onclick="deleteProjectFromHistory('${proj.id}')" title="Delete project">
+                    <i class="ti ti-trash"></i>
+                  </button>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        ` : `
+          <div class="info-box" style="text-align:center;padding:24px">
+            <i class="ti ti-folder-off" style="font-size:28px;color:var(--text-muted);display:block;margin-bottom:8px"></i>
+            <div>No saved projects found in history yet.</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:4px">Click "Save Current Project" above to store your project.</div>
+          </div>
+        `}
+      </div>
     </div>`;
 }
 
-// ── Boot ─────────────────────────────────────────────────────────
-init();
+function renderSetupModal() {
+  if (!S.showSetup) return '';
+  return `
+    <div class="modal-overlay" onclick="if(event.target===this){S.showSetup=false;render();}">
+      <div class="modal-box">
+        <div class="modal-header">
+          <div class="modal-title"><i class="ti ti-key" style="color:var(--brand)"></i> API & Cloud Configuration</div>
+          <button class="modal-close" onclick="S.showSetup=false;render()">&times;</button>
+        </div>
+        <div style="font-size:13px;color:var(--text-secondary);margin-bottom:14px">
+          Wise Simple Studio runs 100% in your browser. API keys and tokens are stored securely in local browser storage.
+        </div>
 
-// ── PWA Install prompt (shown once) ─────────────────────────────
-let deferredInstallPrompt = null;
-window.addEventListener('beforeinstallprompt', e => {
-  e.preventDefault();
-  deferredInstallPrompt = e;
-  showInstallBanner();
-});
+        <div class="section-label" style="margin-bottom:6px">Groq API Key (Fast LLM Script Generation)</div>
+        <input type="password" class="input-field" placeholder="gsk_..." value="${S.apiKey}" oninput="S.apiKey=this.value;localStorage.setItem('groq-key', this.value)" style="margin-bottom:6px" />
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:14px">Get a free key from <a href="https://console.groq.com" target="_blank" style="color:var(--brand)">console.groq.com</a> (Free tier: 14,400 req/day).</div>
 
-function showInstallBanner() {
-  if (sg('install-dismissed')) return;
-  const banner = document.createElement('div');
-  banner.id = 'install-banner';
-  banner.style.cssText = `
-    position:fixed;bottom:0;left:0;right:0;z-index:200;
-    background:var(--brand);color:#fff;
-    padding:14px 16px;display:flex;align-items:center;gap:12px;
-    box-shadow:0 -4px 20px rgba(0,0,0,0.3);
-    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-  `;
-  banner.innerHTML = `
-    <i class="ti ti-download" style="font-size:22px;flex-shrink:0"></i>
-    <div style="flex:1">
-      <div style="font-size:14px;font-weight:600">Install AI Daily</div>
-      <div style="font-size:12px;opacity:0.85">Add to home screen to share directly from any app</div>
-    </div>
-    <button onclick="installPWA()" style="background:#fff;color:var(--brand);border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;flex-shrink:0">Install</button>
-    <button onclick="dismissInstall()" style="background:none;border:none;color:#fff;opacity:0.7;cursor:pointer;font-size:20px;padding:4px;flex-shrink:0">✕</button>
-  `;
-  document.body.appendChild(banner);
+        <div class="section-label" style="margin-bottom:6px">Google Cloud OAuth Client ID (For Google Drive Sync)</div>
+        <input type="text" class="input-field" placeholder="your-client-id.apps.googleusercontent.com" value="${S.googleClientId}" oninput="S.googleClientId=this.value;localStorage.setItem('gdrive-client-id', this.value)" style="margin-bottom:6px" />
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:14px">Enables 1-click cloud sync of projects and assets directly to your Google Drive.</div>
+
+        <div class="section-label" style="margin-bottom:6px">Google AI Studio API Key (Optional for Veo 2 / Gemini)</div>
+        <input type="password" class="input-field" placeholder="AIza..." value="${S.googleApiKey}" oninput="S.googleApiKey=this.value;localStorage.setItem('google-key', this.value)" style="margin-bottom:6px" />
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:16px">Optional. If omitted, Wise Studio automatically uses high-speed Free AI Visual Models.</div>
+
+        <button class="btn-primary" style="width:100%" onclick="S.showSetup=false;render()"><i class="ti ti-check"></i> Save & Continue</button>
+      </div>
+    </div>`;
 }
 
-function installPWA() {
-  if (deferredInstallPrompt) {
-    deferredInstallPrompt.prompt();
-    deferredInstallPrompt.userChoice.then(r => {
-      if (r.outcome === 'accepted') dismissInstall();
-    });
+// ── Studio Main Panels (Steps 0–6) ────────────────────────────────────
+function buildStudio() {
+  const steps = [
+    { icon: 'ti-bulb',       label: 'Concept' },
+    { icon: 'ti-script',     label: 'Script' },
+    { icon: 'ti-wand',       label: 'Prompts' },
+    { icon: 'ti-user-check', label: 'Characters' },
+    { icon: 'ti-video',      label: 'Generate' },
+    { icon: 'ti-layout-grid',label: 'Timeline' },
+    { icon: 'ti-download',   label: 'Export' }
+  ];
+
+  const stepperHtml = `
+    <div class="studio-stepper">
+      ${steps.map((st, i) => `
+        <div class="studio-step ${i === S.studioStep ? 'active' : ''} ${i < S.studioStep ? 'done' : ''}" onclick="${i <= S.studioStep ? `S.studioStep=${i};render()` : ''}">
+          <div class="studio-step-dot"><i class="ti ${i < S.studioStep ? 'ti-check' : st.icon}"></i></div>
+          <span class="studio-step-label">${st.label}</span>
+        </div>
+        ${i < steps.length - 1 ? '<div class="studio-step-line ' + (i < S.studioStep ? 'done' : '') + '"></div>' : ''}
+      `).join('')}
+    </div>`;
+
+  const errorHtml = S.studioError ? `<div class="error-box" style="margin-bottom:14px"><i class="ti ti-alert-circle"></i> ${S.studioError}</div>` : '';
+  const progressHtml = S.studioProgress ? `<div class="info-box" style="margin-bottom:14px"><span class="pulse-dot"></span> ${S.studioProgress}</div>` : '';
+
+  // Quality Validation Alert Banner
+  const qualityAlertHtml = S.qualityAlert ? `
+    <div class="quality-alert-box">
+      <i class="ti ti-alert-triangle" style="font-size:24px;color:#ef4444;flex-shrink:0;margin-top:2px"></i>
+      <div style="flex:1">
+        <div style="font-weight:700;font-size:14px;color:#ef4444">${S.qualityAlert.title}</div>
+        <div style="font-size:12px;margin-top:4px;color:#fecaca">${S.qualityAlert.reason}</div>
+        <div style="font-size:11px;color:#fca5a5;margin-top:4px">
+          <strong>File:</strong> ${S.qualityAlert.filename} &bull; <em>Rejected to preserve story visual quality.</em>
+        </div>
+      </div>
+      <button onclick="S.qualityAlert=null;render()" style="background:none;border:none;color:#fca5a5;cursor:pointer;font-size:18px">&times;</button>
+    </div>` : '';
+
+  let panelHtml = '';
+
+  // Step 0: Concept Input
+  if (S.studioStep === 0) {
+    const styleCards = Object.entries(STUDIO_STYLES).map(([key, st]) => `
+      <button class="studio-style-card ${S.studioStyle === key ? 'active' : ''}" onclick="S.studioStyle='${key}';render()">
+        <i class="ti ${st.icon}" style="font-size:20px;color:var(--brand)"></i>
+        <span class="studio-style-name">${st.label}</span>
+        <span class="studio-style-desc">${st.desc}</span>
+      </button>
+    `).join('');
+
+    const durationBtns = STUDIO_DURATIONS.map(d => `
+      <button class="pill-btn ${S.studioDuration === d.value ? 'active' : ''}" onclick="S.studioDuration='${d.value}';render()">${d.label} <span style="opacity:0.6;font-size:10px">(${d.scenes} scenes)</span></button>
+    `).join('');
+
+    const aspectBtns = ['16:9','9:16','1:1'].map(a => `
+      <button class="pill-btn ${S.studioAspect === a ? 'active' : ''}" onclick="S.studioAspect='${a}';render()">${a}</button>
+    `).join('');
+
+    panelHtml = `
+      <div class="card" style="border-left:4px solid var(--brand)">
+        <div class="section-label" style="margin-bottom:14px"><i class="ti ti-sparkles" style="color:var(--brand)"></i> What is your animated story or video about?</div>
+        <textarea class="input-field" rows="3" placeholder="Describe your story idea...\n\nExample: The Hare and Tortoise have an epic hill race with hilarious twists, inventive science gadgets, and a heartwarming moral lesson for kids." oninput="S.studioTopic=this.value">${S.studioTopic}</textarea>
+
+        <div class="section-label" style="margin-top:18px;margin-bottom:10px">Visual Style</div>
+        <div class="studio-style-grid">${styleCards}</div>
+
+        <div class="section-label" style="margin-top:18px;margin-bottom:10px">Target Duration</div>
+        <div class="filter-pills">${durationBtns}</div>
+
+        <div class="section-label" style="margin-top:18px;margin-bottom:10px">Aspect Ratio</div>
+        <div class="filter-pills">${aspectBtns}</div>
+
+        <div style="display:flex;gap:10px;margin-top:22px;flex-wrap:wrap">
+          <button class="btn-primary" onclick="generateStudioScript()" ${S.studioLoading ? 'disabled' : ''}>
+            ${S.studioLoading ? '<span class="pulse-dot"></span> Generating...' : '<i class="ti ti-wand"></i> Generate Script'}
+          </button>
+          <button class="btn-primary" onclick="runFullPipeline()" ${S.studioLoading ? 'disabled' : ''} style="background:linear-gradient(135deg,#3b82f6,#10b981)">
+            <i class="ti ti-bolt"></i> Full Auto Run
+          </button>
+          <button class="btn-primary" onclick="loadSampleEpic()" ${S.studioLoading ? 'disabled' : ''} style="background:linear-gradient(135deg,#f59e0b,#ef4444);color:#fff">
+            <i class="ti ti-sparkles"></i> 🎬 Load 7-Min Kids Story
+          </button>
+        </div>
+      </div>`;
+  }
+
+  // Step 1: Script Review
+  if (S.studioStep === 1 && S.studioScript) {
+    const scenes = S.studioScript.scenes || [];
+    panelHtml = `
+      <div class="card" style="margin-bottom:14px">
+        <div class="section-label"><i class="ti ti-script"></i> Generated Scene-by-Scene Script</div>
+        ${S.studioScript.mainCharacter && S.studioScript.mainCharacter !== 'none' ? `
+          <div style="background:var(--surface-2);padding:12px;border-radius:8px;margin-top:10px;border-left:3px solid var(--brand)">
+            <div style="font-size:12px;font-weight:700;color:var(--brand);margin-bottom:4px"><i class="ti ti-user"></i> Main Characters</div>
+            <div style="font-size:13px;color:var(--text-secondary)">${renderMarkdown(S.studioScript.mainCharacter)}</div>
+          </div>` : ''}
+        ${S.studioScript.narrator ? `
+          <div style="background:var(--surface-2);padding:12px;border-radius:8px;margin-top:8px;border-left:3px solid var(--text-success)">
+            <div style="font-size:12px;font-weight:700;color:var(--text-success);margin-bottom:4px"><i class="ti ti-microphone"></i> Narration & Moral</div>
+            <div style="font-size:13px;color:var(--text-secondary)">${renderMarkdown(S.studioScript.narrator)}</div>
+          </div>` : ''}
+      </div>
+
+      ${scenes.map((sc, i) => `
+        <div class="phase-card">
+          <div class="phase-header">
+            <span style="font-size:11px;font-weight:700;color:var(--brand);background:var(--bg-accent);padding:2px 8px;border-radius:10px">Scene ${sc.sceneNum || i+1}</span>
+            <span class="phase-name">${sc.title}</span>
+            <span style="font-size:11px;color:var(--text-muted);margin-left:auto">${sc.duration || '?'}s</span>
+          </div>
+          <div class="phase-summary">${renderMarkdown(sc.description)}</div>
+          <div class="sub-points-list">
+            <div class="sub-bullet-row"><i class="ti ti-map-pin"></i> <span>${sc.environment || ''}</span></div>
+            <div class="sub-bullet-row"><i class="ti ti-sun"></i> <span>${sc.lighting || ''}</span></div>
+            <div class="sub-bullet-row"><i class="ti ti-camera"></i> <span>${sc.camera || ''}</span></div>
+            <div class="sub-bullet-row"><i class="ti ti-bell"></i> <span>${sc.soundEffect || 'No sound cue'}</span></div>
+          </div>
+        </div>
+      `).join('')}
+
+      <div style="display:flex;gap:8px;margin-top:16px">
+        <button class="btn-primary" onclick="expandStudioPrompts()" ${S.studioLoading ? 'disabled' : ''}>
+          ${S.studioLoading ? '<span class="pulse-dot"></span> Expanding...' : '<i class="ti ti-arrow-right"></i> Expand to Prompts'}
+        </button>
+        <button class="btn-ghost" onclick="exportStudioScript()"><i class="ti ti-copy"></i> Copy Script</button>
+        <button class="btn-ghost" onclick="S.studioStep=0;render()"><i class="ti ti-arrow-left"></i> Back</button>
+      </div>`;
+  }
+
+  // Step 2: Cinematic Prompts
+  if (S.studioStep === 2 && S.studioPrompts.length) {
+    panelHtml = `
+      <div class="section-label" style="margin-bottom:10px"><i class="ti ti-wand"></i> Cinematic Video Prompts (${S.studioPrompts.length})</div>
+      ${S.studioPrompts.map((p, i) => `
+        <div class="phase-card">
+          <div class="phase-header">
+            <span style="font-size:11px;font-weight:700;color:var(--brand);background:var(--bg-accent);padding:2px 8px;border-radius:10px">${i+1}</span>
+            <span class="phase-name">${p.title}</span>
+            <span class="pill-btn" style="cursor:default;font-size:11px;padding:2px 8px">${p.cameraMove || ''}</span>
+          </div>
+          <div class="studio-prompt-text">${p.veoPrompt}</div>
+          ${p.negativePrompt ? `<div style="font-size:11px;color:var(--text-danger);margin-top:6px"><strong>Negative:</strong> ${p.negativePrompt}</div>` : ''}
+        </div>
+      `).join('')}
+
+      <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
+        <button class="btn-primary" onclick="S.studioStep=3;render()" style="background:linear-gradient(135deg,#4285f4,#34a853)">
+          <i class="ti ti-user-check"></i> Next: Assign Characters (Mandatory)
+        </button>
+        <button class="btn-ghost" style="font-size:12px;color:#f87171;border-color:rgba(239,68,68,0.4)" onclick="testLowQualityRejection()" title="Simulate quality gate rejection"><i class="ti ti-shield-alert"></i> Test Quality Gate</button>
+            <button class="btn-ghost" onclick="generateCharacterRef()" ${S.studioLoading ? 'disabled' : ''}>
+          <i class="ti ti-wand"></i> AI Character Ref
+        </button>
+        <button class="btn-ghost" onclick="exportStudioPrompts()"><i class="ti ti-clipboard"></i> Copy All Prompts</button>
+        <button class="btn-ghost" onclick="S.studioStep=1;render()"><i class="ti ti-arrow-left"></i> Back</button>
+      </div>`;
+  }
+
+  // Step 3: Character Studio & Mandatory Scene Assignment
+  if (S.studioStep === 3) {
+    const scenes = S.studioScript?.scenes || [];
+    const characters = S.studioCharacters || [];
+    const unassigned = getUnassignedScenes();
+    const assignedCount = scenes.length - unassigned.length;
+    const isAllAssigned = scenes.length > 0 && unassigned.length === 0;
+
+    panelHtml = `
+      <div class="card" style="margin-bottom:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:10px">
+          <div>
+            <div class="section-label" style="margin-bottom:4px"><i class="ti ti-user-check"></i> Character Visual Studio & Mandatory Scene Assignment</div>
+            <div style="font-size:12px;color:var(--text-secondary)">
+              Upload custom character images. <strong>Strict Requirement:</strong> Only high-resolution images (min 512x512px) are accepted.
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn-primary" onclick="document.getElementById('studio-char-file-input').click()">
+              <i class="ti ti-upload"></i> Upload Character Image
+            </button>
+            <button class="btn-ghost" onclick="autoMatchScriptCharacters()" ${!characters.length || !scenes.length ? 'disabled' : ''} title="Automatically assign characters based on scene text">
+              <i class="ti ti-wand"></i> Auto-Match Scenes
+            </button>
+            <button class="btn-ghost" onclick="generateCharacterRef()" ${S.studioLoading ? 'disabled' : ''} title="Generate with AI">
+              <i class="ti ti-sparkles"></i> AI Character Ref
+            </button>
+          </div>
+        </div>
+
+        <input type="file" id="studio-char-file-input" accept="image/*" multiple onchange="handleCharacterUpload(event)" style="display:none" />
+
+        <div class="studio-upload-zone" onclick="document.getElementById('studio-char-file-input').click()" ondragover="event.preventDefault();this.style.borderColor='var(--brand)'" ondragleave="this.style.borderColor=''" ondrop="handleCharacterDrop(event)">
+          <i class="ti ti-cloud-upload"></i>
+          <div style="font-size:14px;font-weight:600;margin-top:4px;color:var(--text-primary)">Click to Upload or Drag & Drop Character Images</div>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:2px">Quality Gate: Minimum 512x512px. Low quality images are automatically rejected to protect output quality.</div>
+        </div>
+
+        <div class="section-label" style="margin-top:20px;margin-bottom:10px"><i class="ti ti-users"></i> Available Characters (${characters.length})</div>
+        ${characters.length ? `
+          <div class="studio-char-grid">
+            ${characters.map((c, i) => `
+              <div class="studio-char-card">
+                <div style="position:relative">
+                  <img src="${resolveAssetUrl(c.url)}" alt="${c.name || 'Character'}" class="studio-char-img" onclick="openLightbox('${resolveAssetUrl(c.url)}', '${c.name || 'Character'}')" />
+                  <span class="studio-char-badge">${c.name || 'Character ' + (i+1)}</span>
+                  <button class="studio-char-delete-btn" onclick="deleteStudioCharacter('${c.id}')" title="Delete character"><i class="ti ti-trash"></i></button>
+                </div>
+                <div style="padding:10px">
+                  <div style="font-size:13px;font-weight:600;color:var(--text-primary)">${c.name || 'Character ' + (i+1)}</div>
+                  <div style="font-size:11px;color:var(--text-muted);margin-top:4px;line-height:1.4">${renderMarkdown((c.description || '').substring(0, 100))}</div>
+                  <div style="margin-top:8px">
+                    <button class="btn-ghost" style="width:100%;font-size:11px;padding:4px 8px" onclick="assignCharacterToAllScenes('${c.id}')">
+                      <i class="ti ti-check-all"></i> Assign to All Scenes
+                    </button>
+                  </div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        ` : `
+          <div class="info-box" style="margin-top:10px">
+            <i class="ti ti-info-circle"></i> No character images uploaded yet. Please click <strong>"Upload Character Image"</strong> above to provide your character art.
+          </div>
+        `}
+      </div>
+
+      <div class="card" style="margin-top:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+          <div>
+            <div class="section-label" style="margin-bottom:2px">
+              <i class="ti ti-list-check"></i> Mandatory Scene Character Assignment
+            </div>
+            <div style="font-size:12px;color:var(--text-secondary)">
+              Every single scene must be assigned a character. The video rendering pipeline will strictly use only these assigned images.
+            </div>
+          </div>
+          <div style="font-size:12px;font-weight:600;color:${isAllAssigned ? 'var(--text-success)' : 'var(--text-warning)'}">
+            ${assignedCount} of ${scenes.length} Scenes Assigned (${Math.round(scenes.length ? (assignedCount/scenes.length)*100 : 0)}%)
+          </div>
+        </div>
+
+        ${!isAllAssigned ? `
+          <div class="studio-gate-banner">
+            <i class="ti ti-alert-triangle" style="font-size:22px;flex-shrink:0"></i>
+            <div>
+              <div style="font-weight:700">Mandatory Requirement Incomplete</div>
+              <div style="font-size:12px;opacity:0.9">
+                You must assign a character image for <strong>all ${scenes.length} scenes</strong> before generating clips. 
+                <span style="font-weight:600">${unassigned.length} scene(s) remaining.</span>
+              </div>
+            </div>
+          </div>
+        ` : `
+          <div class="studio-gate-success">
+            <i class="ti ti-circle-check" style="font-size:22px;flex-shrink:0"></i>
+            <div>
+              <div style="font-weight:700">All Scenes Successfully Assigned!</div>
+              <div style="font-size:12px;opacity:0.9">
+                100% of scenes have assigned character images. Video clips and exports will strictly use these visuals.
+              </div>
+            </div>
+          </div>
+        `}
+
+        <div class="studio-scene-assign-grid">
+          ${scenes.map((sc, i) => {
+            const assignedChar = characters.find(c => c.id === sc.assignedCharacterId);
+            const isAssigned = !!assignedChar;
+            return `
+              <div class="studio-scene-assign-card ${!isAssigned ? 'unassigned' : 'assigned'}">
+                <div style="display:flex;align-items:center;gap:12px">
+                  ${isAssigned ? `
+                    <img src="${resolveAssetUrl(assignedChar.url)}" alt="${assignedChar.name}" class="studio-assign-thumb" onclick="openLightbox('${resolveAssetUrl(assignedChar.url)}', '${assignedChar.name}')" title="Click to enlarge" />
+                  ` : `
+                    <div class="studio-assign-thumb-placeholder" title="Character image required">
+                      <i class="ti ti-alert-triangle"></i>
+                    </div>
+                  `}
+                  <div style="flex:1;min-width:0">
+                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                      <span style="font-size:11px;font-weight:700;color:var(--brand);background:var(--bg-accent);padding:1px 6px;border-radius:6px">Scene ${sc.sceneNum || i+1}</span>
+                      <span style="font-size:13px;font-weight:600;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${sc.title || 'Scene ' + (i+1)}</span>
+                      <span style="font-size:11px;color:var(--text-muted);margin-left:auto">${sc.duration || 35}s</span>
+                    </div>
+                    <div style="font-size:11px;color:var(--text-secondary);margin-top:3px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">
+                      ${sc.narration ? `"${sc.narration}"` : sc.description || ''}
+                    </div>
+                  </div>
+                </div>
+
+                <div style="display:flex;align-items:center;gap:8px;margin-top:10px">
+                  <div style="flex:1">
+                    <select class="select-field" style="width:100%;font-size:12px;height:32px;${!isAssigned ? 'border-color:#ef4444;background:rgba(239,68,68,0.08);color:#ef4444;font-weight:600' : ''}" onchange="assignCharacterToScene(${i}, this.value)">
+                      <option value="">-- ⚠️ Select Character (Mandatory) --</option>
+                      ${characters.map(ch => `
+                        <option value="${ch.id}" ${sc.assignedCharacterId === ch.id ? 'selected' : ''}>${ch.name || 'Character'}</option>
+                      `).join('')}
+                    </select>
+                  </div>
+                  ${isAssigned ? `
+                    <button class="btn-ghost" style="padding:4px 8px;font-size:11px" onclick="assignCharacterToAllScenes('${assignedChar.id}')" title="Apply this character to all scenes">
+                      <i class="ti ti-copy"></i> All
+                    </button>
+                  ` : ''}
+                </div>
+              </div>`;
+          }).join('')}
+        </div>
+
+        <div style="display:flex;gap:8px;margin-top:18px;flex-wrap:wrap">
+          <button class="btn-primary" onclick="generateAllClips()" ${!isAllAssigned || S.studioLoading ? 'disabled' : ''} style="${isAllAssigned ? 'background:linear-gradient(135deg,#4285f4,#34a853)' : 'opacity:0.5;cursor:not-allowed'}">
+            ${S.studioLoading ? '<span class="pulse-dot"></span> Generating...' : `<i class="ti ti-video"></i> Generate All Clips (${scenes.length} Scenes)`}
+          </button>
+          <button class="btn-ghost" onclick="S.studioStep=2;render()"><i class="ti ti-arrow-left"></i> Back to Prompts</button>
+        </div>
+      </div>`;
+  }
+
+  // Step 4: Video Generation Progress
+  if (S.studioStep === 4) {
+    panelHtml = `
+      <div class="section-label" style="margin-bottom:10px"><i class="ti ti-video"></i> Video Generation Progress</div>
+      ${S.studioClips.map((clip, i) => {
+        const statusIcon = clip.status === 'done' ? 'ti-circle-check' : clip.status === 'error' ? 'ti-alert-circle' : clip.status === 'generating' || clip.status === 'polling' ? 'ti-loader' : clip.status === 'pending-manual' ? 'ti-hand-click' : 'ti-clock';
+        const statusColor = clip.status === 'done' ? 'var(--text-success)' : clip.status === 'error' ? 'var(--text-danger)' : clip.status === 'pending-manual' ? 'var(--text-warning)' : 'var(--text-muted)';
+        const statusText = clip.status === 'done' ? 'Ready' : clip.status === 'error' ? 'Error' : clip.status === 'generating' ? 'Generating...' : clip.status === 'polling' ? 'Processing...' : clip.status === 'pending-manual' ? 'Manual' : 'Queued';
+        return `
+          <div class="phase-card" style="border-left:3px solid ${statusColor}">
+            <div class="phase-header">
+              <i class="ti ${statusIcon} ${clip.status === 'generating' || clip.status === 'polling' ? 'studio-spin' : ''}" style="color:${statusColor};font-size:18px"></i>
+              <span class="phase-name">Scene ${i+1}</span>
+              <span style="font-size:12px;color:${statusColor};margin-left:auto">${statusText}</span>
+            </div>
+            <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">${(clip.prompt || '').substring(0, 120)}${(clip.prompt || '').length > 120 ? '...' : ''}</div>
+            ${clip.error ? `<div style="font-size:11px;color:var(--text-danger);margin-top:6px">${clip.error}</div>` : ''}
+            ${clip.videoUrl ? `<video src="${clip.videoUrl}" controls class="studio-clip-preview" style="margin-top:8px"></video>` : clip.imageUrl ? `<img src="${resolveAssetUrl(clip.imageUrl)}" class="studio-clip-preview" style="margin-top:8px;border-radius:6px;max-height:220px;object-fit:cover" alt="Scene ${i+1}" />` : ''}
+            ${clip.status === 'error' ? `<button class="btn-ghost" style="font-size:11px;padding:3px 8px;margin-top:6px" onclick="generateStudioClip(${i})"><i class="ti ti-refresh"></i> Retry</button>` : ''}
+          </div>`;
+      }).join('')}
+      <div style="display:flex;gap:8px;margin-top:14px">
+        <button class="btn-primary" onclick="S.studioStep=5;render()"><i class="ti ti-layout-grid"></i> Go to Timeline</button>
+        <button class="btn-ghost" onclick="exportStudioPrompts()"><i class="ti ti-clipboard"></i> Copy Prompts</button>
+      </div>`;
+  }
+
+  // Step 5: Timeline & Clips (Distinct Scene Thumbnails)
+  if (S.studioStep === 5) {
+    panelHtml = renderStudioPlayer() + `
+      <div class="section-label" style="margin-bottom:10px"><i class="ti ti-layout-grid"></i> Timeline & Scenes</div>
+      <div class="studio-timeline">
+        ${S.studioClips.map((clip, i) => {
+          const p = S.studioPrompts[i];
+          const sc = S.studioScript?.scenes?.[i];
+          const cuts = clip.cuts || [];
+          const cutTotal = getClipCutTotal(i);
+          const assignedChar = (S.studioCharacters || []).find(c => c.id === sc?.assignedCharacterId);
+
+          return `
+            <div class="studio-timeline-clip">
+              <div class="studio-timeline-header">
+                <span style="font-size:11px;font-weight:700;color:var(--brand)">${i+1}</span>
+                <span style="font-size:12px;font-weight:500;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p?.title || 'Scene ' + (i+1)}</span>
+                ${assignedChar ? `
+                  <span class="studio-char-pill" title="Assigned Character: ${assignedChar.name}">
+                    <img src="${resolveAssetUrl(assignedChar.url)}" class="studio-char-avatar" />
+                    <span>${assignedChar.name.split(' ')[0]}</span>
+                  </span>
+                ` : ''}
+                ${cuts.length ? `<span class="studio-cut-pill" style="font-size:9px;padding:1px 5px" title="${cuts.length} cut(s) applied"><i class="ti ti-scissors"></i> ${cuts.length}</span>` : ''}
+                <div style="display:flex;gap:4px">
+                  <button class="btn-ghost" style="padding:2px 6px;font-size:11px;color:${cuts.length ? '#f87171' : 'var(--text-muted)'}" onclick="openClipCutModal(${i})" title="Cut/Trim this scene"><i class="ti ti-scissors"></i></button>
+                  <button class="btn-ghost" style="padding:2px 6px;font-size:11px" onclick="reorderClip(${i},${i-1})" ${i === 0 ? 'disabled' : ''}><i class="ti ti-arrow-up"></i></button>
+                  <button class="btn-ghost" style="padding:2px 6px;font-size:11px" onclick="reorderClip(${i},${i+1})" ${i === S.studioClips.length - 1 ? 'disabled' : ''}><i class="ti ti-arrow-down"></i></button>
+                </div>
+              </div>
+              ${clip.videoUrl ? `<video src="${clip.videoUrl}" controls class="studio-clip-preview"></video>` : clip.imageUrl ? `<img src="${resolveAssetUrl(clip.imageUrl)}" class="studio-clip-preview" alt="Scene ${i+1}" />` : `<div class="studio-clip-placeholder">No visual</div>`}
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 8px;font-size:10px;color:var(--text-muted)">
+                <span>${p?.cameraMove || ''}</span>
+                <span><strong>${getClipEffectiveDuration(i)}s</strong>${cutTotal > 0 ? ` <s style="opacity:0.6">${sc?.duration || '?'}s</s>` : ''}</span>
+              </div>
+            </div>`;
+        }).join('')}
+      </div>
+      <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
+        <button class="btn-primary" onclick="S.studioStep=6;render()"><i class="ti ti-download"></i> Go to Export</button>
+        <button class="btn-ghost" onclick="exportStudioPrompts()"><i class="ti ti-clipboard"></i> Copy All Prompts</button>
+        <button class="btn-ghost" onclick="S.studioStep=4;render()"><i class="ti ti-arrow-left"></i> Back</button>
+      </div>`;
+  }
+
+  // Step 6: Export
+  if (S.studioStep === 6) {
+    panelHtml = `
+      ${renderStudioPlayer()}
+      <div class="studio-export-hero">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+          <div>
+            <div style="font-size:18px;font-weight:700;color:var(--text-primary);display:flex;align-items:center;gap:8px">
+              <i class="ti ti-movie" style="color:var(--brand);font-size:24px"></i>
+              Export & Download Full Movie
+            </div>
+            <div style="font-size:13px;color:var(--text-secondary);margin-top:4px">
+              Compiles all ${S.studioClips.length} animated scenes, motion visuals, dynamic subtitles, and audio soundtrack into a single downloadable .webm video file.
+            </div>
+          </div>
+          <button class="btn-primary" style="padding:12px 24px;font-size:15px;background:linear-gradient(135deg,#10b981,#059669)" onclick="exportFullVideo()">
+            <i class="ti ti-download"></i> Download Full Video
+          </button>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
+        <button class="btn-primary" onclick="saveCurrentProjectToHistory()"><i class="ti ti-device-floppy"></i> Save to History & Drive</button>
+        <button class="btn-ghost" onclick="exportStudioJSON()"><i class="ti ti-file-export"></i> Save Project JSON</button>
+        <button class="btn-ghost" onclick="exportStudioScript()"><i class="ti ti-copy"></i> Copy Script</button>
+        <button class="btn-ghost" onclick="S.studioStep=5;render()"><i class="ti ti-arrow-left"></i> Back to Timeline</button>
+      </div>`;
+  }
+
+  return stepperHtml + qualityAlertHtml + errorHtml + progressHtml + panelHtml;
+}
+
+// ── Application Root Renderer ─────────────────────────────────────────
+function render() {
+  const statusCls = !S.apiKey ? '' : 'ok';
+  const statusTxt = !S.apiKey ? '<i class="ti ti-key"></i> Set API Key' : '<i class="ti ti-circle-check"></i> Groq Connected';
+
+  document.getElementById('app').innerHTML = `
+    ${renderSetupModal()}
+    ${renderHistoryModal()}
+    ${renderLightbox()}
+    ${renderClipCutModal()}
+    ${renderExportProgressModal()}
+    <input type="file" id="studio-import-file-input" accept=".json" onchange="importStudioJSON(event)" style="display:none" />
+
+    <div class="shell">
+      <header class="header">
+        <div class="header-left">
+          <div class="logo-mark"><i class="ti ti-movie"></i></div>
+          <div>
+            <div class="logo-name">Wise Simple Studio</div>
+            <div class="logo-sub">AI Video & Animated Story Creator</div>
+          </div>
+        </div>
+        <div class="header-right">
+          <select class="select-field" title="Active Model" onchange="S.activeModel=this.value;localStorage.setItem('active-model', this.value)">
+            ${S.availableModels.map(m => `<option value="${m}" ${m === S.activeModel ? 'selected' : ''}>${m}</option>`).join('')}
+          </select>
+          <button class="api-status ${statusCls}" onclick="S.showSetup=true;render()">${statusTxt}</button>
+          <button class="btn-ghost" style="font-size:12px;padding:6px 12px;color:var(--brand);font-weight:600" onclick="S.historyModal.open=true;render()" title="Browse project history & cloud backups">
+            <i class="ti ti-history"></i> History & Drive
+          </button>
+          <button class="btn-ghost" style="font-size:12px;padding:6px 12px" onclick="document.getElementById('studio-import-file-input').click()" title="Import existing project JSON"><i class="ti ti-upload"></i> Import</button>
+          <button class="btn-ghost" style="font-size:12px;padding:6px 12px" onclick="exportStudioJSON()" title="Export current project JSON"><i class="ti ti-download"></i> Export</button>
+        </div>
+      </header>
+
+      <main>
+        ${buildStudio()}
+      </main>
+    </div>`;
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────
+function init() {
+  const restored = restoreStudioState();
+  if (!restored) {
+    loadSampleEpic();
+  } else {
+    render();
   }
 }
-function dismissInstall() {
-  ss('install-dismissed', true);
-  document.getElementById('install-banner')?.remove();
-}
+
+init();

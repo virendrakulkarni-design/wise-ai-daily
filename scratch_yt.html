@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Test YT Player API</title>
+</head>
+<body>
+  <h1>Testing YT Player API</h1>
+  <div id="player"></div>
+  <div id="output" style="font-family: monospace; white-space: pre; font-size: 16px;">Waiting...</div>
+  <script src="https://www.youtube.com/iframe_api"></script>
+  <script>
+    window.onYouTubeIframeAPIReady = function() {
+      document.getElementById('output').textContent += "\nAPI Ready. Creating player...";
+      const player = new YT.Player('player', {
+        height: '200',
+        width: '300',
+        videoId: 'ewgAKF9j__o',
+        playerVars: {
+          autoplay: 0,
+          controls: 0,
+          disablekb: 1,
+          fs: 0,
+          rel: 0
+        },
+        events: {
+          onReady: function(event) {
+            const dur = player.getDuration();
+            const data = player.getVideoData();
+            document.getElementById('output').textContent += "\nonReady! Duration: " + dur + " sec\nVideoData: " + JSON.stringify(data, null, 2);
+          },
+          onError: function(e) {
+            document.getElementById('output').textContent += "\nError: " + e.data;
+          }
+        }
+      });
+    };
+  </script>
+</body>
+</html>
