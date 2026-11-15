@@ -70,6 +70,9 @@ const S = {
   newName: '',
   followError: '',
   tempKey: '',
+  topicInput: '',
+  topicLoading: false,
+  activeTopicResult: null,
 };
 
 // ── Storage ──────────────────────────────────────────────────────
@@ -853,7 +856,10 @@ async function callGroq(prompt, maxTokens = 2200) {
 
   const data = await res.json();
   S.apiKeyValid = true;
-  const text = data.choices?.[0]?.message?.content || '';
+  const choice = data.choices?.[0];
+  const text = (choice?.message?.content || '').trim() ||
+               (choice?.message?.reasoning || '').trim() ||
+               (choice?.text || '').trim();
   return cleanAndParseJSON(text);
 }
 
@@ -1679,7 +1685,7 @@ async function fetchDigest() {
     ? '\nAlso include latest content from: ' + S.following.map(f=>`${f.platform} @${f.handle}`).join(', ') + '.'
     : '';
 
-  const prompt = `Today is ${TODAY}. Generate a daily AI news digest of 12 varied trending AI/ML items from the last 24 hours.
+  const prompt = `Today is ${TODAY}. Generate a daily AI news digest of 8 varied trending AI/ML items from the last 24 hours.
 Mix of:
 - Breaking AI model or product announcements (OpenAI, Anthropic, Google, Meta, Mistral, xAI)
 - Trending GitHub repos for AI/ML
@@ -1697,7 +1703,7 @@ URL GENERATION RULES (CRITICAL):
 5. For YouTube videos: Use "https://www.youtube.com/results?search_query=KEYWORDS".
 6. STRICTLY FORBIDDEN: NEVER invent non-existent deep slugs like "https://www.anthropic.com/news/claude-4-5" or fake blog paths that cause 404 errors. Every URL MUST open successfully.
 
-You MUST return exactly 12 items in the "items" array, numbered item-1 to item-12. Do not stop early. Each item needs 3 bullet point key insights.
+You MUST return 8 items in the "items" array, numbered item-1 to item-8. Do not stop early. Each item needs 2-3 key insights.
 
 Return ONLY this JSON:
 {
@@ -1717,7 +1723,7 @@ Return ONLY this JSON:
 }`;
 
   try {
-    const result = await callGroq(prompt, 1800);
+    const result = await callGroq(prompt, 2500);
     const normalized = normalizeDigest(result);
     normalized.date = TODAY;
     S.todayDigest = normalized;
@@ -1728,6 +1734,111 @@ Return ONLY this JSON:
     else S.loadError = e.message;
   }
   S.loading=false; render();
+}
+
+// ── Research specific AI topic ────────────────────────────────────
+async function researchTopic() {
+  const topic = (S.topicInput || '').trim();
+  if (!topic) {
+    S.loadError = 'Please enter an AI topic to research.';
+    render();
+    return;
+  }
+  if (!S.apiKey) { S.showSetup = true; render(); return; }
+
+  S.topicLoading = true;
+  S.loadError = '';
+  render();
+
+  let liveTopicContext = '';
+  try {
+    const qEnc = encodeURIComponent(topic);
+    const [hnRes] = await Promise.allSettled([
+      fetch(`https://hn.algolia.com/api/v1/search?query=${qEnc}&tags=story&hitsPerPage=5`)
+    ]);
+    if (hnRes.status === 'fulfilled' && hnRes.value.ok) {
+      const hnData = await hnRes.value.json();
+      const hits = (hnData.hits || []).slice(0, 4);
+      if (hits.length > 0) {
+        liveTopicContext = '\nRECENT COMMUNITY DISCUSSIONS & REAL LINKS:\n' +
+          hits.map(h => `- "${h.title}" (URL: ${h.url || `https://news.ycombinator.com/item?id=${h.objectID}`})`).join('\n') + '\n';
+      }
+    }
+  } catch {}
+
+  const prompt = `You are a world-class AI/ML research analyst. Conduct a deep, high-signal technical research briefing on the topic: "${topic}" strictly within the context of Artificial Intelligence and Machine Learning.
+
+${liveTopicContext}
+Synthesize 6 to 8 deep, structured research items covering:
+1. Core Architectural Breakthroughs & Mechanisms
+2. State-of-the-Art Models, Frameworks, and Tooling
+3. Open-Source Repositories & Implementations (use real GitHub search URLs: https://github.com/search?q=...)
+4. Benchmarks, Real-world Performance & Production Best Practices
+5. Key Academic Research Papers (use https://arxiv.org/search/?query=...)
+
+URL RULES:
+- Use real URLs from community discussions if applicable.
+- For GitHub repos: Use "https://github.com/search?q=..." or exact GitHub repo URL.
+- For Papers: Use "https://arxiv.org/search/?query=..." or exact paper URL.
+- For News/Articles: Use "https://news.google.com/search?q=..."
+- NEVER invent non-existent deep URLs that result in 404s.
+
+Return ONLY this valid JSON:
+{
+  "topic": "${topic.replace(/"/g, '\\"')}",
+  "fetchedAt": "${new Date().toLocaleTimeString()}",
+  "overview": "Comprehensive 2-3 sentence executive summary of the state of ${topic.replace(/"/g, '\\"')} in AI today.",
+  "items": [
+    {
+      "id": "topic-1",
+      "title": "Clear descriptive title of the finding or tool",
+      "url": "https://...",
+      "platform": "web|github|paper|twitter|youtube",
+      "type": "repo|article|paper|tool|breakthrough",
+      "source": "Project or author name",
+      "importance": "high|medium",
+      "points": [
+        "Concrete technical insight, architecture detail, or mechanism",
+        "Developer workflow, benchmark result, or implementation guideline"
+      ]
+    }
+  ]
+}`;
+
+  try {
+    const result = await callGroq(prompt, 2500);
+    const normalized = normalizeDigest(result);
+    normalized.topic = topic;
+    normalized.date = TODAY;
+    normalized.isTopicResearch = true;
+    S.activeTopicResult = normalized;
+
+    // Save into history as a research briefing
+    const topicAsSummary = {
+      id: 'topic-' + Date.now(),
+      title: `AI Research: ${topic}`,
+      platform: 'web',
+      type: 'Research Briefing',
+      url: `https://news.google.com/search?q=${encodeURIComponent(topic + ' AI')}`,
+      source: 'AI Daily Research',
+      date: TODAY,
+      createdAt: new Date().toISOString(),
+      overview: result.overview || `In-depth technical research briefing on ${topic} in the context of modern AI and machine learning systems.`,
+      phases: (normalized.items || []).slice(0, 5).map(it => ({
+        title: it.title,
+        summary: (it.points || []).join(' '),
+        subPoints: it.points || []
+      })),
+      takeaways: (normalized.items || []).slice(0, 4).map(it => it.title + ': ' + (it.points?.[0] || ''))
+    };
+    saveSummaryToCache(topicAsSummary);
+
+  } catch (e) {
+    if (e.message === 'NO_KEY') S.showSetup = true;
+    else S.loadError = e.message;
+  }
+  S.topicLoading = false;
+  render();
 }
 
 // ── Paste from clipboard & summarize (one tap) ───────────────────
@@ -2130,38 +2241,103 @@ function buildSetup() {
 
 // ── Tab: Feed ────────────────────────────────────────────────────
 function buildFeed() {
-  const d=S.todayDigest;
-  const ds=new Date(TODAY+'T00:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+  const d = S.todayDigest;
+  const ds = new Date(TODAY + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  const topicResult = S.activeTopicResult;
+
   return `
+    <!-- Top Action Bar -->
     <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:1rem;gap:12px;flex-wrap:wrap">
-      <div><div class="section-label">Today's Digest</div><div style="font-size:16px;font-weight:500">${ds}</div></div>
-      <button class="btn-primary" onclick="fetchDigest()" ${S.loading||S.modelsLoading?'disabled':''}>
-        ${S.loading?`<span class="pulse-dot"></span> Researching…`:`<i class="ti ti-telescope"></i> ${d?'Refresh':'Research Now'}`}
+      <div>
+        <div class="section-label">Today's Digest</div>
+        <div style="font-size:16px;font-weight:500">${ds}</div>
+      </div>
+      <button class="btn-primary" onclick="S.activeTopicResult=null;fetchDigest()" ${S.loading || S.modelsLoading ? 'disabled' : ''}>
+        ${S.loading ? `<span class="pulse-dot"></span> Checking news…` : `<i class="ti ti-news"></i> ${d ? 'Refresh Latest AI News' : 'Check Latest AI News'}`}
       </button>
     </div>
-    ${S.loadError?`<div class="error-box"><i class="ti ti-alert-circle"></i> ${S.loadError}</div>`:''}
-    ${!S.apiKey?`<div class="info-box">
+
+    <!-- AI Topic Research Box -->
+    <div class="card" style="margin-bottom:1.25rem;background:linear-gradient(135deg,rgba(108,63,197,0.06),rgba(168,85,247,0.04));border:1px solid rgba(108,63,197,0.25);border-radius:12px;padding:14px 16px">
+      <div style="font-size:13px;font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:6px">
+        <i class="ti ti-sparkles" style="color:var(--brand)"></i> Research Any AI Topic
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <input class="input-field" style="flex:1;min-width:220px;height:38px" 
+          type="text" 
+          placeholder="e.g. Agentic coding, DeepSeek R1, Voice AI agents, Local SLMs..."
+          value="${(S.topicInput || '').replace(/"/g, '&quot;')}"
+          oninput="S.topicInput=this.value"
+          onkeydown="if(event.key==='Enter')researchTopic()" />
+        <button class="btn-primary" style="height:38px;padding:0 16px;white-space:nowrap" 
+          onclick="researchTopic()" 
+          ${S.topicLoading || S.loading || S.modelsLoading ? 'disabled' : ''}>
+          ${S.topicLoading ? `<span class="pulse-dot"></span> Researching…` : `<i class="ti ti-search"></i> Research Topic`}
+        </button>
+      </div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:6px">
+        Researches state-of-the-art tools, architectures, GitHub repositories, and benchmarks for any topic.
+      </div>
+    </div>
+
+    ${S.loadError ? `<div class="error-box"><i class="ti ti-alert-circle"></i> ${S.loadError}</div>` : ''}
+    ${!S.apiKey ? `<div class="info-box">
       <i class="ti ti-key" style="margin-right:6px"></i>
       Add your free Groq API key to get started.
       <button class="btn-ghost" style="margin-left:8px;padding:3px 10px;font-size:12px" onclick="S.showSetup=true;render()">Set up →</button>
-    </div>`:''}
-    ${S.modelsLoading?`<div class="loading-row"><span class="pulse-dot"></span> Detecting available models on your account…</div>`:''}
-    ${S.apiKey&&!S.modelsLoading&&!S.activeModel?`<div class="error-box"><i class="ti ti-alert-circle"></i> Could not detect any models — check your API key. <button class="btn-ghost" style="margin-left:8px;padding:3px 10px;font-size:12px" onclick="S.showSetup=true;S.tempKey='';render()">Re-enter key</button></div>`:''}
-    ${S.loading?`<div class="loading-row"><span class="pulse-dot"></span> Searching YouTube · X · GitHub · arXiv · blogs…</div>
+    </div>` : ''}
+    ${S.modelsLoading ? `<div class="loading-row"><span class="pulse-dot"></span> Detecting available models on your account…</div>` : ''}
+    ${S.apiKey && !S.modelsLoading && !S.activeModel ? `<div class="error-box"><i class="ti ti-alert-circle"></i> Could not detect any models — check your API key. <button class="btn-ghost" style="margin-left:8px;padding:3px 10px;font-size:12px" onclick="S.showSetup=true;S.tempKey='';render()">Re-enter key</button></div>` : ''}
+
+    ${S.loading ? `
+      <div class="loading-row"><span class="pulse-dot"></span> Scanning latest AI news from YouTube, X, GitHub, and arXiv…</div>
       <div class="skeleton" style="height:100px"></div><div class="skeleton" style="height:80px"></div>
-      <div class="skeleton" style="height:90px"></div><div class="skeleton" style="height:80px"></div>`:''}
-    ${!S.loading&&!d?`<div class="empty-state">
-      <i class="ti ti-robot"></i>
-      <h3>No digest yet for today</h3>
-      <p>Hit <strong>Research Now</strong> to pull today's top AI content from across the web.</p>
-    </div>`:''}
-    ${!S.loading&&d?`
+      <div class="skeleton" style="height:90px"></div><div class="skeleton" style="height:80px"></div>
+    ` : ''}
+
+    ${S.topicLoading ? `
+      <div class="loading-row"><span class="pulse-dot"></span> Conducting deep research on "${S.topicInput}" within AI context…</div>
+      <div class="skeleton" style="height:110px"></div><div class="skeleton" style="height:85px"></div>
+      <div class="skeleton" style="height:95px"></div>
+    ` : ''}
+
+    <!-- Active Topic Research Display -->
+    ${!S.topicLoading && topicResult ? `
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="model-badge" style="background:var(--brand);color:#fff"><i class="ti ti-sparkles"></i> Research: ${topicResult.topic}</span>
+          <span style="font-size:12px;color:var(--text-muted)">${(topicResult.items || []).length} findings · ${topicResult.fetchedAt || ''}</span>
+        </div>
+        <button class="btn-ghost" style="font-size:12px;padding:3px 10px" onclick="S.activeTopicResult=null;render()" title="Back to today's news">
+          <i class="ti ti-news"></i> View Daily News
+        </button>
+      </div>
+      ${topicResult.overview ? `
+        <div class="summary-overview" style="margin-bottom:14px">
+          <div class="overview-label"><i class="ti ti-bulb"></i> Topic Overview</div>
+          <div class="overview-text">${renderMarkdown(topicResult.overview)}</div>
+        </div>
+      ` : ''}
+      ${renderItems(topicResult.items)}
+    ` : ''}
+
+    <!-- Daily Digest Display -->
+    ${!S.loading && !S.topicLoading && !topicResult && !d ? `
+      <div class="empty-state">
+        <i class="ti ti-robot"></i>
+        <h3>No digest yet for today</h3>
+        <p>Hit <strong>Check Latest AI News</strong> to pull today's top AI content, or enter a specific topic above to research.</p>
+      </div>
+    ` : ''}
+
+    ${!S.loading && !S.topicLoading && !topicResult && d ? `
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
-        <span style="font-size:12px;color:var(--text-muted)">Updated ${d.fetchedAt||''} · ${(d.items||[]).length} items</span>
-        ${S.activeModel?`<span class="model-badge">${S.activeModel}</span>`:''}
+        <span style="font-size:12px;color:var(--text-muted)">Updated ${d.fetchedAt || ''} · ${(d.items || []).length} items</span>
+        ${S.activeModel ? `<span class="model-badge">${S.activeModel}</span>` : ''}
       </div>
       ${renderItems(d.items)}
-    `:''}`;
+    ` : ''}
+  `;
 }
 
 // ── Tab: Add URL ─────────────────────────────────────────────────
