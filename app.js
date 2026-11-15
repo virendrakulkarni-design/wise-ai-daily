@@ -680,6 +680,35 @@ function changeModel(id) {
 }
 
 // ── Core API call & Resilient JSON Parser ─────────────────────────
+function repairTruncatedJSON(str) {
+  let cleaned = str.trim();
+  const firstBrace = cleaned.indexOf('{');
+  if (firstBrace === -1) return cleaned;
+  cleaned = cleaned.slice(firstBrace);
+
+  const stack = [];
+  let inString = false, escaped = false;
+  for (let i = 0; i < cleaned.length; i++) {
+    const ch = cleaned[i];
+    if (escaped) { escaped = false; continue; }
+    if (ch === '\\') { escaped = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (!inString) {
+      if (ch === '{') stack.push('}');
+      else if (ch === '[') stack.push(']');
+      else if (ch === '}' || ch === ']') {
+        if (stack.length && stack[stack.length - 1] === ch) stack.pop();
+      }
+    }
+  }
+  if (inString) cleaned += '"';
+  cleaned = cleaned.replace(/,\s*$/, '');
+  while (stack.length > 0) {
+    cleaned += stack.pop();
+  }
+  return cleaned;
+}
+
 function cleanAndParseJSON(rawText) {
   if (!rawText || typeof rawText !== 'string') {
     throw new Error('Model returned an empty response. Try again.');
@@ -725,20 +754,24 @@ function cleanAndParseJSON(rawText) {
     try {
       return JSON.parse(fixedTrailing);
     } catch (e3) {
-      throw new Error(`Model returned invalid JSON (${e2.message}). Please click Re-analyze.`);
+      try {
+        const repaired = repairTruncatedJSON(cleaned);
+        return JSON.parse(repaired);
+      } catch (e4) {
+        throw new Error(`Model returned invalid JSON (${e2.message}). Please click Re-analyze.`);
+      }
     }
   }
 }
 
-async function callGroq(prompt, maxTokens = 1500) {
+async function callGroq(prompt, maxTokens = 2200) {
   if (!S.apiKey) throw new Error('NO_KEY');
   if (!S.activeModel) throw new Error('No model selected — refresh the page or re-enter your API key.');
 
   const requestBody = {
     model: S.activeModel,
     max_tokens: maxTokens,
-    temperature: 0.3,
-    response_format: { type: "json_object" },
+    temperature: 0.2,
     messages: [
       { role: 'system', content: 'You are an AI research assistant. You must always return a strictly valid standard JSON object. Never use ellipses (...), never omit array items, and never use markdown code fences.' },
       { role: 'user', content: prompt }
@@ -756,19 +789,16 @@ async function callGroq(prompt, maxTokens = 1500) {
     const errBody = await res.json().catch(() => ({}));
     const errMsg = (errBody.error?.message || '').toLowerCase();
 
-    // 1. If model rejects json_object response_format
-    if (errMsg.includes('response_format')) {
-      delete requestBody.response_format;
-      res = await fetch(GROQ_API, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${S.apiKey}` },
-        body: JSON.stringify(requestBody),
-      });
+    // 1. If Groq captured failed_generation, try parsing and repairing it directly
+    if (errBody.error?.failed_generation) {
+      try {
+        return cleanAndParseJSON(errBody.error.failed_generation);
+      } catch {}
     }
+
     // 2. If Groq reports message or completion length overflow
-    else if (errMsg.includes('reduce the length') || errMsg.includes('context')) {
-      // Reduce completion budget and trim prompt
-      requestBody.max_tokens = Math.min(1000, Math.floor(requestBody.max_tokens / 2));
+    if (errMsg.includes('reduce the length') || errMsg.includes('context')) {
+      requestBody.max_tokens = Math.min(1200, Math.floor(requestBody.max_tokens / 2));
       if (prompt.length > 2000) {
         requestBody.messages[1].content = prompt.slice(0, 1200) + '\n\n' + prompt.slice(-800);
       }
@@ -777,24 +807,26 @@ async function callGroq(prompt, maxTokens = 1500) {
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${S.apiKey}` },
         body: JSON.stringify(requestBody),
       });
+    }
 
-      // If still failing, attempt fallback to next available model (e.g. 120b or qwen)
-      if (!res.ok && Array.isArray(S.availableModels) && S.availableModels.length > 1) {
-        const altModel = S.availableModels.find(m => m !== S.activeModel && !isExcludedModel(m));
-        if (altModel) {
-          requestBody.model = altModel;
-          res = await fetch(GROQ_API, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${S.apiKey}` },
-            body: JSON.stringify(requestBody),
-          });
-          if (res.ok) {
-            S.activeModel = altModel;
-            ss('active-model', altModel);
-          }
+    // 3. Fallback to next available model if needed
+    if (!res.ok && Array.isArray(S.availableModels) && S.availableModels.length > 1) {
+      const altModel = S.availableModels.find(m => m !== S.activeModel && !isExcludedModel(m));
+      if (altModel) {
+        requestBody.model = altModel;
+        res = await fetch(GROQ_API, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${S.apiKey}` },
+          body: JSON.stringify(requestBody),
+        });
+        if (res.ok) {
+          S.activeModel = altModel;
+          ss('active-model', altModel);
         }
       }
-    } else {
+    }
+
+    if (!res.ok) {
       throw new Error(errBody.error?.message || `HTTP ${res.status}`);
     }
   }
@@ -1916,7 +1948,7 @@ Return ONLY valid JSON (no markdown fences, no extra text):
 };`;
 
   try {
-    const rawResult = await callGroq(prompt, 1500);
+    const rawResult = await callGroq(prompt, 2200);
     const finalResult = normalizeSummaryOutput(rawResult, parsed, cleanTitle, videoAuthor, url);
     finalResult.canonicalKey = canonicalKey;
     finalResult.isCached = true;
