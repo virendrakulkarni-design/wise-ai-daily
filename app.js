@@ -730,7 +730,7 @@ function cleanAndParseJSON(rawText) {
   }
 }
 
-async function callGroq(prompt, maxTokens = 2048) {
+async function callGroq(prompt, maxTokens = 1500) {
   if (!S.apiKey) throw new Error('NO_KEY');
   if (!S.activeModel) throw new Error('No model selected — refresh the page or re-enter your API key.');
 
@@ -751,16 +751,49 @@ async function callGroq(prompt, maxTokens = 2048) {
     body: JSON.stringify(requestBody),
   });
 
-  // If the model rejects response_format (e.g. older Gemma), retry without it
+  // Handle errors & auto-recovery for 400 Bad Request
   if (!res.ok && res.status === 400) {
     const errBody = await res.json().catch(() => ({}));
-    if (errBody.error?.message?.includes('response_format')) {
+    const errMsg = (errBody.error?.message || '').toLowerCase();
+
+    // 1. If model rejects json_object response_format
+    if (errMsg.includes('response_format')) {
       delete requestBody.response_format;
       res = await fetch(GROQ_API, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${S.apiKey}` },
         body: JSON.stringify(requestBody),
       });
+    }
+    // 2. If Groq reports message or completion length overflow
+    else if (errMsg.includes('reduce the length') || errMsg.includes('context')) {
+      // Reduce completion budget and trim prompt
+      requestBody.max_tokens = Math.min(1000, Math.floor(requestBody.max_tokens / 2));
+      if (prompt.length > 2000) {
+        requestBody.messages[1].content = prompt.slice(0, 1200) + '\n\n' + prompt.slice(-800);
+      }
+      res = await fetch(GROQ_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${S.apiKey}` },
+        body: JSON.stringify(requestBody),
+      });
+
+      // If still failing, attempt fallback to next available model (e.g. 120b or qwen)
+      if (!res.ok && Array.isArray(S.availableModels) && S.availableModels.length > 1) {
+        const altModel = S.availableModels.find(m => m !== S.activeModel && !isExcludedModel(m));
+        if (altModel) {
+          requestBody.model = altModel;
+          res = await fetch(GROQ_API, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${S.apiKey}` },
+            body: JSON.stringify(requestBody),
+          });
+          if (res.ok) {
+            S.activeModel = altModel;
+            ss('active-model', altModel);
+          }
+        }
+      }
     } else {
       throw new Error(errBody.error?.message || `HTTP ${res.status}`);
     }
@@ -1634,7 +1667,7 @@ Return ONLY this JSON:
 }`;
 
   try {
-    const result = await callGroq(prompt, 3000);
+    const result = await callGroq(prompt, 1800);
     const normalized = normalizeDigest(result);
     normalized.date = TODAY;
     S.todayDigest = normalized;
@@ -1754,7 +1787,7 @@ async function summarizeURL(forceRefresh = false) {
     if (jinaRes.ok) {
       const fullText = await jinaRes.text();
       if (fullText && fullText.length > 150 && !fullText.includes('403 Forbidden') && !fullText.includes('AbuseAlleviationError')) {
-        pageContent = fullText.slice(0, 8000);
+        pageContent = fullText.slice(0, 2500);
       }
     }
   } catch {}
@@ -1883,7 +1916,7 @@ Return ONLY valid JSON (no markdown fences, no extra text):
 };`;
 
   try {
-    const rawResult = await callGroq(prompt, 3000);
+    const rawResult = await callGroq(prompt, 1500);
     const finalResult = normalizeSummaryOutput(rawResult, parsed, cleanTitle, videoAuthor, url);
     finalResult.canonicalKey = canonicalKey;
     finalResult.isCached = true;
