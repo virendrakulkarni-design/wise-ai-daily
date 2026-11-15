@@ -163,11 +163,15 @@ function refreshHistoryDates() {
 
 function formatDateLabel(dateStr) {
   if (!dateStr) return '';
-  const parts = dateStr.split('-').map(Number);
-  if (parts.length !== 3 || parts.some(isNaN)) return dateStr;
-  const dt = new Date(parts[0], parts[1] - 1, parts[2]);
-  const formatted = dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-  return dateStr === TODAY ? `${formatted} · Today` : formatted;
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    const formatted = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+    const isToday = (typeof dateStr === 'string' && dateStr.slice(0, 10) === TODAY);
+    return isToday ? `${formatted} · Today` : formatted;
+  } catch {
+    return dateStr;
+  }
 }
 
 // ── Fetch model list live from Groq ──────────────────────────────
@@ -619,18 +623,28 @@ async function init() {
     ]
   };
 
-  // Register in persistent url-cache store
-  ss('url-cache:youtube:vwLVjHEGGK0', seedVipassana);
-  ss('url-cache:youtube:Qsi9MeLh95Q', seedAiVideo);
-  ss('url-cache:youtube:PEEBZwGetyc', seedAstra);
-  ss('url-cache:youtube:ewgAKF9j__o', seedNeemKaroliBaba);
+  // Initialize sample seeds ONLY ONCE on very first launch so user history is never overridden
+  const seedsInitialized = sg('ai-seeds-initialized');
+  if (!seedsInitialized) {
+    if (!S.urlSummaries || S.urlSummaries.length === 0) {
+      S.urlSummaries = [seedNeemKaroliBaba, seedAstra, seedVipassana, seedAiVideo];
+      ss('ai-summaries', S.urlSummaries);
+      ss('url-cache:youtube:vwLVjHEGGK0', seedVipassana);
+      ss('url-cache:youtube:Qsi9MeLh95Q', seedAiVideo);
+      ss('url-cache:youtube:PEEBZwGetyc', seedAstra);
+      ss('url-cache:youtube:ewgAKF9j__o', seedNeemKaroliBaba);
+    }
+    ss('ai-seeds-initialized', true);
+  }
 
-  // Upgrade or seed S.urlSummaries with latest rich seeds
-  const otherSummaries = (S.urlSummaries || []).filter(s => 
-    !(s.url || '').includes('vwLVjHEGGK0') && !(s.url || '').includes('Qsi9MeLh95Q') && !(s.url || '').includes('PEEBZwGetyc') && !(s.url || '').includes('ewgAKF9j__o')
-  );
-  S.urlSummaries = [seedNeemKaroliBaba, seedAstra, seedVipassana, seedAiVideo, ...otherSummaries];
-  ss('ai-summaries', S.urlSummaries);
+  // Ensure user summaries are always sorted newest first
+  if (Array.isArray(S.urlSummaries)) {
+    S.urlSummaries.sort((a, b) => {
+      const timeA = new Date(a.savedAt || a.createdAt || a.date || 0).getTime();
+      const timeB = new Date(b.savedAt || b.createdAt || b.date || 0).getTime();
+      return timeB - timeA;
+    });
+  }
 
   refreshHistoryDates();
   S.showSetup    = !S.apiKey;
@@ -993,20 +1007,24 @@ function saveSummaryToCache(summary) {
   if (!summary) return;
   const parsed = parseURL(summary.url);
   const canonicalKey = summary.canonicalKey || (parsed ? getCanonicalKey(parsed) : null);
+  summary.savedAt = summary.savedAt || new Date().toISOString();
+  summary.createdAt = summary.createdAt || summary.savedAt;
+  summary.date = summary.date || TODAY;
+
   if (canonicalKey) {
     summary.canonicalKey = canonicalKey;
     ss('url-cache:' + canonicalKey, summary);
   }
-  const existingIdx = (S.urlSummaries || []).findIndex(s =>
+  if (!Array.isArray(S.urlSummaries)) S.urlSummaries = [];
+  const existingIdx = S.urlSummaries.findIndex(s =>
     (s.canonicalKey && canonicalKey && s.canonicalKey === canonicalKey) ||
     (s.id && s.id === summary.id) ||
     (parsed?.id && (s.url || '').includes(parsed.id))
   );
   if (existingIdx >= 0) {
-    S.urlSummaries[existingIdx] = summary;
-  } else {
-    S.urlSummaries.unshift(summary);
+    S.urlSummaries.splice(existingIdx, 1);
   }
+  S.urlSummaries.unshift(summary);
   S.urlSummaries = S.urlSummaries.slice(0, 100);
   ss('ai-summaries', S.urlSummaries);
 }
@@ -1964,8 +1982,50 @@ Return ONLY valid JSON (no markdown fences, no extra text):
 
 
 function deleteSummary(id) {
+  if (!id) return;
+  const item = (S.urlSummaries || []).find(s => s.id === id);
+  if (item) {
+    if (item.canonicalKey) localStorage.removeItem('url-cache:' + item.canonicalKey);
+    const parsed = parseURL(item.url || '');
+    if (parsed) {
+      const key = getCanonicalKey(parsed);
+      if (key) localStorage.removeItem('url-cache:' + key);
+    }
+  }
   S.urlSummaries = (S.urlSummaries || []).filter(s => s.id !== id);
   ss('ai-summaries', S.urlSummaries);
+  if (S.urlResult && S.urlResult.id === id) {
+    S.urlResult = null;
+  }
+  render();
+}
+
+function clearAllSummaries() {
+  if (!confirm('Clear all saved URL summaries from history?')) return;
+  (S.urlSummaries || []).forEach(s => {
+    if (s.canonicalKey) localStorage.removeItem('url-cache:' + s.canonicalKey);
+    const parsed = parseURL(s.url || '');
+    if (parsed) {
+      const key = getCanonicalKey(parsed);
+      if (key) localStorage.removeItem('url-cache:' + key);
+    }
+  });
+  S.urlSummaries = [];
+  ss('ai-summaries', []);
+  ss('ai-seeds-initialized', true);
+  S.urlResult = null;
+  render();
+}
+
+function deleteDigestDate(date, event) {
+  if (event) event.stopPropagation();
+  localStorage.removeItem('digest:' + date);
+  if (date === TODAY) S.todayDigest = null;
+  if (S.historySelected === date) {
+    S.historySelected = null;
+    S.historyData = null;
+  }
+  refreshHistoryDates();
   render();
 }
 
@@ -2356,9 +2416,12 @@ function buildHistory() {
   if (S.historySelected) {
     const hd = S.historyData;
     const dt = formatDateLabel(S.historySelected);
-    return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem">
-      <button class="btn-ghost" onclick="S.historySelected=null;S.historyData=null;render()"><i class="ti ti-arrow-left"></i> Back</button>
-      <div style="font-size:15px;font-weight:500">${dt}</div>
+    return `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+      <div style="display:flex;align-items:center;gap:10px">
+        <button class="btn-ghost" onclick="S.historySelected=null;S.historyData=null;render()"><i class="ti ti-arrow-left"></i> Back</button>
+        <div style="font-size:15px;font-weight:500">${dt}</div>
+      </div>
+      <button class="btn-ghost" style="font-size:12px;color:var(--text-danger)" onclick="deleteDigestDate('${S.historySelected}', event)"><i class="ti ti-trash"></i> Delete Digest</button>
     </div>
     ${hd ? `<div style="font-size:12px;color:var(--text-muted);margin-bottom:14px">${(hd.items||[]).length} items · ${hd.fetchedAt||''}</div>${renderItems(hd.items)}`
          : `<div class="error-box"><i class="ti ti-alert-circle"></i> Digest not found.</div>`}`;
@@ -2428,10 +2491,15 @@ function buildHistory() {
         <i class="ti ti-link"></i> URL Summaries (${urlSummaries.length})
       </button>
     </div>
-    <div style="margin-bottom:14px">
-      <input class="input-field" type="search" placeholder="Search all history items, topics, keywords..."
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+      <input class="input-field" style="flex:1;min-width:200px" type="search" placeholder="Search all history items, topics, keywords..."
         value="${S.historySearch}"
         oninput="S.historySearch=this.value;render()" />
+      ${urlSummaries.length > 0 ? `
+        <button class="btn-ghost" style="font-size:11px;color:var(--text-danger);padding:6px 10px" onclick="clearAllSummaries()" title="Delete all saved URL summaries">
+          <i class="ti ti-trash"></i> Clear All Summaries
+        </button>
+      ` : ''}
     </div>
   `;
 
@@ -2479,6 +2547,9 @@ function buildHistory() {
           <div style="display:flex;align-items:center;gap:6px">
             <span style="font-size:12px;color:var(--brand);font-weight:500">View items</span>
             <i class="ti ti-chevron-right" style="color:var(--text-muted)"></i>
+            <button class="btn-ghost" style="padding:4px 8px;font-size:12px;color:var(--text-danger);margin-left:6px" onclick="deleteDigestDate('${date}', event)" title="Delete this digest">
+              <i class="ti ti-trash"></i>
+            </button>
           </div>
         </div>`;
       }).join('')}
