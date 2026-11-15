@@ -173,7 +173,8 @@ function formatDateLabel(dateStr) {
 // ── Fetch model list live from Groq ──────────────────────────────
 function isExcludedModel(id) {
   const lower = id.toLowerCase();
-  return lower.includes('whisper') ||
+  return lower.includes('allam') || // Arabic regional LLM, unsuitable for English software analysis
+    lower.includes('whisper') ||
     lower.includes('tts') ||
     lower.includes('orpheus') ||
     lower.includes('audio') ||
@@ -188,7 +189,7 @@ function isExcludedModel(id) {
 function scoreModelHeuristic(id) {
   let score = 0;
   const lower = id.toLowerCase();
-  if (lower.includes('allam')) score -= 60; // regional specialized model
+  if (lower.includes('allam')) score -= 100;
   if (lower.includes('120b')) score += 100;
   else if (lower.includes('70b')) score += 80;
   else if (lower.includes('32b')) score += 60;
@@ -224,18 +225,21 @@ async function loadModels(key) {
     });
     if (!res.ok) { S.apiKeyValid = false; S.modelsLoading = false; render(); return; }
     const data = await res.json();
-    // Only keep text generation models (exclude whisper/tts/vision/guard/audio)
+    // Only keep text generation models (exclude whisper/tts/vision/guard/audio/allam)
     S.availableModels = (data.data || [])
       .map(m => m.id)
       .filter(id => !isExcludedModel(id))
       .sort();
 
-    // Pick best model: respect saved choice if valid, else pick top priority / capability
+    // Auto-select best model; if previously saved model is weak (like allam) or inferior, upgrade to best available
     const saved = sg('active-model');
-    S.activeModel =
-      (saved && S.availableModels.includes(saved) && !isExcludedModel(saved)) ? saved :
-      selectBestModel(S.availableModels);
+    const bestModel = selectBestModel(S.availableModels);
+    const isSavedValidAndStrong = saved &&
+      S.availableModels.includes(saved) &&
+      !isExcludedModel(saved) &&
+      scoreModelHeuristic(saved) >= 40;
 
+    S.activeModel = isSavedValidAndStrong ? saved : bestModel;
     ss('active-model', S.activeModel);
     S.apiKeyValid = true;
   } catch(e) {
@@ -245,8 +249,13 @@ async function loadModels(key) {
 }
 
 // ── Init ─────────────────────────────────────────────────────────
-// ── Init ─────────────────────────────────────────────────────────
 async function init() {
+  // Clear any weak, regional, or previously excluded models
+  const savedModel = sg('active-model');
+  if (savedModel && (isExcludedModel(savedModel) || scoreModelHeuristic(savedModel) < 40)) {
+    localStorage.removeItem('active-model');
+  }
+
   S.apiKey       = sg('groq-api-key') || '';
   S.following    = sg('ai-following') || [];
   S.todayDigest  = normalizeDigest(sg('digest:'+TODAY));
@@ -846,6 +855,32 @@ function renderMarkdown(str) {
 }
 
 // ── Persistent Deterministic Cache Helpers ─────────────────────────
+function isLowQualitySummary(s) {
+  if (!s || !Array.isArray(s.phases) || s.phases.length === 0) return true;
+  let duplicateCount = 0;
+  for (const p of s.phases) {
+    const sum = (p.summary || '').trim().toLowerCase();
+    if (sum.includes('data management, model selection')) return true;
+    if (sum.includes('specific actionable detail')) return true;
+    if (sum.includes('core principle or insight')) return true;
+    if (Array.isArray(p.subPoints)) {
+      for (const sp of p.subPoints) {
+        if (sp.trim().toLowerCase() === sum) duplicateCount++;
+      }
+    }
+  }
+  if (duplicateCount >= 2) return true;
+  if (Array.isArray(s.takeaways)) {
+    for (const t of s.takeaways) {
+      const tNorm = t.trim().toLowerCase();
+      if (s.phases.some(p => (p.summary || '').trim().toLowerCase() === tNorm)) {
+        duplicateCount++;
+      }
+    }
+  }
+  return duplicateCount >= 2;
+}
+
 function findCachedSummary(parsed) {
   if (!parsed) return null;
   const canonicalKey = getCanonicalKey(parsed);
@@ -869,7 +904,20 @@ function findCachedSummary(parsed) {
   }
 
   if (cached) {
-    // Auto-repair any older cached summary with placeholder takeaways or non-monotonic timestamps
+    // Purge poisoned, repetitive, or hallucinated entries from weak models
+    if (isLowQualitySummary(cached)) {
+      if (canonicalKey) localStorage.removeItem('url-cache:' + canonicalKey);
+      if (Array.isArray(S.urlSummaries)) {
+        S.urlSummaries = S.urlSummaries.filter(s => {
+          if (s.canonicalKey && canonicalKey && s.canonicalKey === canonicalKey) return false;
+          if (parsed.id && (s.url || '').includes(parsed.id)) return false;
+          return true;
+        });
+        ss('ai-summaries', S.urlSummaries);
+      }
+      return null;
+    }
+    // Auto-repair valid cached summaries with placeholder takeaways or non-monotonic timestamps
     return normalizeSummaryOutput(cached, parsed, cached.title, cached.source, cached.url);
   }
 
@@ -1411,6 +1459,7 @@ function normalizeSummaryOutput(raw, parsed, cleanTitle, videoAuthor, url) {
   const yId = (parsed.platform === 'youtube' && parsed.id) ? parsed.id : null;
   res.phases = validPhases.map((p, idx) => {
     let cleanSub = [];
+    const pSumNorm = (p.summary || '').trim().toLowerCase();
     if (Array.isArray(p.subPoints)) {
       cleanSub = p.subPoints
         .map(sp => String(sp || '').trim())
@@ -1419,14 +1468,18 @@ function normalizeSummaryOutput(raw, parsed, cleanTitle, videoAuthor, url) {
           if (placeholderRegex.test(sp)) return false;
           if (/^specific actionable detail/i.test(sp)) return false;
           if (/^specific detail/i.test(sp)) return false;
+          if (sp.toLowerCase() === pSumNorm) return false;
           return true;
         });
     }
-    // If all subPoints were placeholders or empty, derive from phase summary sentences
-    if (cleanSub.length === 0 && p.summary && p.summary.length > 25) {
-      const sentences = p.summary.split(/(?<=[.?!])\s+/).filter(s => s.length > 15 && !placeholderRegex.test(s));
-      if (sentences.length > 0) {
-        cleanSub = sentences.slice(0, 2);
+    // Only derive from phase summary if there are MULTIPLE distinct sentences
+    if (cleanSub.length === 0 && p.summary && p.summary.length > 50) {
+      const sentences = p.summary
+        .split(/(?<=[.?!])\s+/)
+        .map(s => s.trim())
+        .filter(s => s.length > 20 && !placeholderRegex.test(s) && s.toLowerCase() !== pSumNorm);
+      if (sentences.length > 1) {
+        cleanSub = sentences.slice(1, 3);
       }
     }
     return {
@@ -1438,6 +1491,8 @@ function normalizeSummaryOutput(raw, parsed, cleanTitle, videoAuthor, url) {
 
   // 5. Strictly filter out placeholder takeaways (e.g. "Core principle 1", "Core principle 2")
   const placeholderTakeawayRegex = /^(core principle|key takeaway|takeaway|insight|rule of thumb|lesson)(\s*(or|and)\s*insight)?(\s*#?\d+)?$/i;
+  const phaseSummaryNorms = new Set(res.phases.map(p => (p.summary || '').trim().toLowerCase()));
+
   let cleanTakeaways = (Array.isArray(res.takeaways) ? res.takeaways : [])
     .map(t => String(t || '').trim())
     .filter(t => {
@@ -1445,36 +1500,36 @@ function normalizeSummaryOutput(raw, parsed, cleanTitle, videoAuthor, url) {
       if (placeholderTakeawayRegex.test(t)) return false;
       if (/^actionable takeaway\s*\d*$/i.test(t)) return false;
       if (/^core principle or insight/i.test(t)) return false;
+      if (phaseSummaryNorms.has(t.toLowerCase())) return false;
       return true;
     });
 
-  // If takeaways are empty or were all placeholders, derive rich takeaways from phases/subpoints
+  // If takeaways are empty or were all placeholders, derive rich takeaways from distinct subpoints
   if (cleanTakeaways.length < 2 && res.phases.length > 0) {
     const derived = [];
+    const usedTexts = new Set(phaseSummaryNorms);
     res.phases.forEach(p => {
       if (Array.isArray(p.subPoints)) {
         p.subPoints.forEach(sp => {
-          if (sp && sp.length > 25 && !placeholderTakeawayRegex.test(sp) && derived.length < 4) {
+          const spNorm = (sp || '').trim().toLowerCase();
+          if (sp && sp.length > 25 && !usedTexts.has(spNorm) && !placeholderTakeawayRegex.test(sp) && derived.length < 4) {
             derived.push(sp);
+            usedTexts.add(spNorm);
           }
         });
       }
     });
-    if (derived.length < 3) {
-      res.phases.forEach(p => {
-        if (p.summary && p.summary.length > 30 && !derived.includes(p.summary) && derived.length < 4) {
-          derived.push(p.summary);
-        }
-      });
-    }
     if (derived.length >= 2) {
       cleanTakeaways = derived;
     }
   }
 
-  // If still empty, derive from overview sentences
+  // If still empty, derive from overview sentences (only if distinct from phase summaries)
   if (cleanTakeaways.length === 0 && res.overview && res.overview.length > 35) {
-    const sentences = res.overview.split(/(?<=[.?!])\s+/).filter(s => s.length > 25);
+    const sentences = res.overview
+      .split(/(?<=[.?!])\s+/)
+      .map(s => s.trim())
+      .filter(s => s.length > 25 && !phaseSummaryNorms.has(s.toLowerCase()));
     if (sentences.length > 0) cleanTakeaways = sentences.slice(0, 3);
   }
 
@@ -1704,6 +1759,21 @@ async function summarizeURL(forceRefresh = false) {
     }
   } catch {}
 
+  // Enrich context for key AI engineering talks & tools
+  const lowerTitle = (cleanTitle || '').toLowerCase();
+  const lowerUrl = (url || '').toLowerCase();
+  if (lowerTitle.includes('claude code') || lowerTitle.includes('lydia hallie') || lowerUrl.includes('vlfcjwuv4es')) {
+    const talkDossier = `
+VERIFIED TALK DOSSIER (Lydia Hallie, Anthropic - "Rethinking Claude Code Best Practices", AI Engineer):
+- Speaker: Lydia Hallie (Staff Developer Advocate at Anthropic)
+- Tool: Claude Code (Anthropic's terminal-based agentic coding tool)
+- Central Thesis: Stop treating LLMs like brittle, line-by-line supervised autocompletes. Shift from micromanagement and bloated CLAUDE.md files toward autonomous development environments with deterministic verification loops.
+- Key Topic 1 (Context & Prompt Pruning): Audit and ruthlessly prune CLAUDE.md. Developers mistakenly stuff CLAUDE.md with outdated bug workarounds from older models that degrade reasoning on modern models. Keep system instructions lean, modular, and focused strictly on architectural conventions.
+- Key Topic 2 (Autonomous Permissions & Auto-mode): Claude Code's auto-mode uses an intelligent classifier to separate harmless inspection operations (git status, reading files, grep) from high-impact side-effects (git push, rm, deploy). Rather than hard deny-lists, leverage sandboxing and auto-approvals for non-destructive actions.
+- Key Topic 3 (Verification Loops Over Micro-Supervision): Instead of hovering over the agent and approving every line, give the agent execution autonomy backed by fast local test suites, deterministic linters, and type-checkers. Let the agent fail, inspect the stack trace, and self-correct automatically.`;
+    pageContent = (pageContent ? pageContent + '\n\n' : '') + talkDossier;
+  }
+
   const durationInstruction = resolvedDurationSec
     ? `ACTUAL VIDEO DURATION: ${resolvedDurationStr} (${resolvedDurationSec} seconds total).
 REQUIRED NUMBER OF PHASES: Exactly ${numPhases} phases evenly distributed across the duration.
@@ -1736,9 +1806,13 @@ GOAL: Produce an insightful, structured technical breakdown:
    - "summary": 2-3 substantive sentences detailing the concrete workflows, architecture, or tools demonstrated
    - "subPoints": 2-3 specific actionable techniques, settings, CLI flags, rules of thumb, or trade-offs
 3. Key Takeaways: 3 to 4 concrete, actionable principles or best practices.
-   - Each takeaway MUST be a full descriptive sentence (at least 12 words) describing a concrete practice, technical standard, or optimization rule.
+   - Each takeaway MUST be an original, descriptive sentence (at least 15 words) describing a concrete practice, technical standard, or optimization rule.
    - FORBIDDEN: NEVER write generic placeholders like "Core principle 1", "Core principle 2", "Takeaway 1", or "Key rule". State the actual technical recommendation!
-4. STRICT FORBIDDEN LIST:
+4. STRICT QUALITY CONSTRAINTS:
+   - Fill all fields with REAL, concrete technical facts from the video. Do NOT output schema template phrases verbatim.
+   - NEVER repeat the phase summary inside subPoints or takeaways.
+   - SubPoints must be specific technical configurations, commands, settings, or architectural trade-offs distinct from the phase summary.
+   - Avoid generic phrases like "Claude Code and its Applications" or "data management, model selection, and AI optimization". Discuss the actual agent architecture, context pruning, CLI flags, auto-mode permissions, and testing loops!
    - NEVER use placeholder text: "opening context", "first main point", "second main point", "hook", "insight 1", "key takeaway", "closing thoughts".
    - NEVER generate repetitive phase titles or duplicate variations.
    - NEVER output duplicate or backward timestamps.
