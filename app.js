@@ -73,6 +73,10 @@ const S = {
   topicInput: '',
   topicLoading: false,
   activeTopicResult: null,
+  draftLoading: false,
+  draftPost: null,
+  draftError: '',
+  draftDifficulty: 'Advanced',
 };
 
 // ── Storage ──────────────────────────────────────────────────────
@@ -1841,6 +1845,147 @@ Return ONLY this valid JSON:
   render();
 }
 
+// ── Generate GenAI Architecture Blog Post Draft ───────────────────
+async function createArchitecturePostDraft() {
+  const topic = (S.activeTopicResult?.topic || S.topicInput || '').trim();
+  if (!topic) {
+    S.draftError = 'Please enter or research an AI topic first.';
+    render();
+    return;
+  }
+  if (!S.apiKey) { S.showSetup = true; render(); return; }
+
+  S.draftLoading = true;
+  S.draftError = '';
+  render();
+
+  const difficulty = S.draftDifficulty || 'Advanced';
+  const levelClass = `level-${difficulty.toLowerCase()}`;
+
+  // Build context from research findings if available
+  let researchContext = '';
+  if (S.activeTopicResult && Array.isArray(S.activeTopicResult.items)) {
+    researchContext = '\nRESEARCH DOSSIER CONTEXT & EVIDENCE:\n' +
+      (S.activeTopicResult.overview ? `Overview: ${S.activeTopicResult.overview}\n` : '') +
+      S.activeTopicResult.items.map(it => `- ${it.title} (${it.type}): ${(it.points || []).join('; ')}`).join('\n') + '\n';
+  }
+
+  const prompt = `You are a Principal AI Systems Architect. Create a deep, technical architectural blog post dispatch on: "${topic}" for the GenAI Architecture Hub (https://virendrakulkarni-design.github.io/genai-architecture-hub).
+
+${researchContext}
+CRITICAL TONE CONSTRAINTS (HUMANIZER SPECIFICATION):
+- Write strictly in a seasoned systems engineer voice. ZERO emojis, ZERO marketing hype. Focus on latency budgets, memory bounds (VRAM, FLOPs, memory bandwidth), context budgets, and deterministic verification.
+- Enforce valid Mermaid diagram syntax starting with "graph LR" or "graph TD", wrapping labels in double quotes like ["Label"].
+
+TARGET AUDIENCE: Enterprise GenAI Systems Engineers and Architects
+TARGET DIFFICULTY LEVEL: "${difficulty}"
+
+SCHEMA SPECIFICATION - Return ONLY a single valid JSON object:
+{
+  "id": "draft-${Date.now()}",
+  "level": "${difficulty}",
+  "levelClass": "${levelClass}",
+  "readTime": "8 min read",
+  "audience": "Enterprise GenAI Systems Engineers and Architects",
+  "title": "Architecting ${topic.replace(/"/g, '\\"')}: Latency Budgets, Systems Design and Hardware Bounds",
+  "lead": "2-3 sentence executive lead analyzing the systems engineering trade-offs, architecture, and production realities.",
+  "stats": {
+    "type": "info",
+    "title": "The Systems Impact of ${topic.replace(/"/g, '\\"')}:",
+    "items": [
+      "Concrete technical metric or benchmark statistic with numerical figures (e.g. latency reduction, FLOPs, memory throughput).",
+      "Production architectural benefit or regression mitigation across distributed clusters."
+    ]
+  },
+  "mentalModel": {
+    "title": "1. The 60-Second Mental Model: Intuitive Analogy Name",
+    "text": "Clear intuitive analogy followed by precise technical mapping to context caches, GPU kernels, tensor operations, or execution harnesses."
+  },
+  "diagram": "graph TD\\n    Input[\\\"Input Stream\\\"] --> Engine[\\\"Processing Engine\\\"]\\n    Engine --> Output[\\\"Verified Output\\\"]\\n    style Engine fill:#1e3a8a,stroke:#60a5fa,color:#fff",
+  "diagramCaption": "Figure: Architectural Blueprint and Operational Flow for ${topic.replace(/"/g, '\\"')}",
+  "codeTitle": "production_harness.py",
+  "codeContent": "# Production implementation with strict bounds and verification\\n...",
+  "takeaway": {
+    "title": "Key Takeaways",
+    "items": [
+      "Concrete actionable engineering recommendation 1",
+      "Concrete actionable engineering recommendation 2",
+      "Concrete actionable engineering recommendation 3"
+    ],
+    "badge": "1-sentence architectural conclusion summarizing enterprise value."
+  },
+  "draft": true,
+  "publishedAt": "Draft (Under Review)"
+}
+
+Ensure all fields are fully populated with authoritative, high-signal engineering content for "${topic}".`;
+
+  try {
+    const rawResult = await callGroq(prompt, 3200);
+    // Sanitize and normalize
+    const cleanPost = {
+      id: rawResult.id || `draft-${Date.now()}`,
+      level: rawResult.level || difficulty,
+      levelClass: rawResult.levelClass || levelClass,
+      readTime: rawResult.readTime || '8 min read',
+      audience: rawResult.audience || 'Enterprise GenAI Systems Engineers and Architects',
+      title: rawResult.title || `Architecting ${topic}`,
+      lead: rawResult.lead || '',
+      stats: rawResult.stats || { type: 'info', title: `Systems Impact of ${topic}:`, items: [] },
+      mentalModel: rawResult.mentalModel || { title: '1. The 60-Second Mental Model', text: '' },
+      diagram: (rawResult.diagram || '').replace(/\\n/g, '\n'),
+      diagramCaption: rawResult.diagramCaption || `Figure: Architecture Blueprint for ${topic}`,
+      codeTitle: rawResult.codeTitle || 'enterprise_scaffold.py',
+      codeContent: rawResult.codeContent || '# Production implementation',
+      takeaway: rawResult.takeaway || { title: 'Key Takeaways', items: [], badge: '' },
+      draft: true,
+      publishedAt: `Draft (${new Date().toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'})})`
+    };
+
+    // Strip emojis
+    const stripEmojis = (t) => typeof t === 'string' ? t.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, '').trim() : t;
+    cleanPost.title = stripEmojis(cleanPost.title);
+    cleanPost.lead = stripEmojis(cleanPost.lead);
+
+    S.draftPost = cleanPost;
+    try {
+      localStorage.setItem('ai_daily_latest_draft', JSON.stringify(cleanPost));
+    } catch {}
+  } catch (err) {
+    if (err.message === 'NO_KEY') S.showSetup = true;
+    else S.draftError = err.message || 'Failed to generate blog draft.';
+  }
+  S.draftLoading = false;
+  render();
+}
+
+function copyDraftPostJSON() {
+  if (!S.draftPost) return;
+  const jsonStr = JSON.stringify(S.draftPost, null, 2);
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(jsonStr).then(() => {
+      alert('Post JSON copied to clipboard!');
+    }).catch(() => {
+      prompt('Copy Post JSON:', jsonStr);
+    });
+  } else {
+    prompt('Copy Post JSON:', jsonStr);
+  }
+}
+
+function downloadDraftPostJSON() {
+  if (!S.draftPost) return;
+  const jsonStr = JSON.stringify(S.draftPost, null, 2);
+  const blob = new Blob([jsonStr], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const slug = (S.draftPost.title || 'draft').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 40);
+  a.download = `genai-hub-${slug}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 // ── Paste from clipboard & summarize (one tap) ───────────────────
 async function pasteAndSummarize() {
   if (!S.apiKey) { S.showSetup=true; render(); return; }
@@ -2318,6 +2463,84 @@ function buildFeed() {
           <div class="overview-text">${renderMarkdown(topicResult.overview)}</div>
         </div>
       ` : ''}
+
+      <!-- GenAI Architecture Hub Blog Draft Option -->
+      <div class="card" style="margin-bottom:16px;background:linear-gradient(135deg,rgba(245,158,11,0.08),rgba(108,63,197,0.08));border:1px solid rgba(245,158,11,0.3);border-radius:12px;padding:14px 16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+          <div>
+            <div style="font-weight:600;font-size:13.5px;display:flex;align-items:center;gap:6px">
+              <i class="ti ti-article" style="color:#f59e0b"></i> GenAI Architecture Blog Dispatch
+              <span class="model-badge" style="background:rgba(245,158,11,0.2);color:#fbbf24;font-size:11px">Draft Review Mode</span>
+            </div>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:2px">
+              Generate a deep systems engineering post (Mermaid diagram, 60s mental model, stats, production code) and review in draft mode on GenAI Architecture Hub.
+            </div>
+          </div>
+          
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <select class="input-field" style="height:34px;font-size:12px;padding:0 8px" onchange="S.draftDifficulty=this.value">
+              <option value="Advanced" ${S.draftDifficulty === 'Advanced' ? 'selected' : ''}>Advanced</option>
+              <option value="Medium" ${S.draftDifficulty === 'Medium' ? 'selected' : ''}>Medium</option>
+              <option value="Easy" ${S.draftDifficulty === 'Easy' ? 'selected' : ''}>Easy</option>
+            </select>
+            <button class="btn-primary" style="background:#f59e0b;color:#000;border:none;font-weight:600;height:34px;padding:0 14px;font-size:12px"
+              onclick="createArchitecturePostDraft()" ${S.draftLoading ? 'disabled' : ''}>
+              ${S.draftLoading ? `<span class="pulse-dot" style="background:#000"></span> Generating Post…` : `<i class="ti ti-sparkles"></i> Create Blog Post (Draft)`}
+            </button>
+          </div>
+        </div>
+
+        ${S.draftLoading ? `
+          <div class="loading-row" style="margin-top:12px">
+            <span class="pulse-dot" style="background:#f59e0b"></span>
+            Generating systems architecture post (Mermaid diagram, stats, 60s mental model, and production code)...
+          </div>
+        ` : ''}
+
+        ${S.draftError ? `
+          <div class="error-box" style="margin-top:10px">
+            <i class="ti ti-alert-circle"></i> ${S.draftError}
+          </div>
+        ` : ''}
+
+        ${S.draftPost ? `
+          <div style="margin-top:14px;background:var(--bg-secondary);border:1px solid rgba(245,158,11,0.25);border-radius:10px;padding:12px 14px">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span class="model-badge" style="background:#f59e0b;color:#000;font-weight:700"><i class="ti ti-clock-pause"></i> DRAFT FOR REVIEW</span>
+                <span class="model-badge" style="background:rgba(248,113,113,0.15);color:#f87171">${S.draftPost.level}</span>
+                <span style="font-size:12px;color:var(--text-muted)">${S.draftPost.readTime} · ${S.draftPost.audience}</span>
+              </div>
+              <button class="btn-ghost" style="padding:2px 8px;font-size:11px" onclick="S.draftPost=null;render()" title="Close Preview">
+                <i class="ti ti-x"></i>
+              </button>
+            </div>
+
+            <div style="font-size:15px;font-weight:600;margin-bottom:4px;color:var(--text-primary)">
+              ${S.draftPost.title}
+            </div>
+            <div style="font-size:12.5px;color:var(--text-muted);margin-bottom:10px;line-height:1.5">
+              ${S.draftPost.lead}
+            </div>
+
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+              <a href="https://virendrakulkarni-design.github.io/genai-architecture-hub/#draft=${encodeURIComponent(JSON.stringify(S.draftPost))}" 
+                 target="_blank" rel="noopener noreferrer" 
+                 class="btn-primary" 
+                 style="background:#10b981;border-color:#10b981;color:#fff;text-decoration:none;display:inline-flex;align-items:center;gap:6px;height:32px;font-size:12px;padding:0 12px">
+                <i class="ti ti-external-link"></i> Review on GenAI Architecture Hub ↗
+              </a>
+              <button class="btn-ghost" style="height:32px;font-size:12px;padding:0 10px" onclick="copyDraftPostJSON()">
+                <i class="ti ti-copy"></i> Copy Post JSON
+              </button>
+              <button class="btn-ghost" style="height:32px;font-size:12px;padding:0 10px" onclick="downloadDraftPostJSON()">
+                <i class="ti ti-download"></i> Download JSON
+              </button>
+            </div>
+          </div>
+        ` : ''}
+      </div>
+
       ${renderItems(topicResult.items)}
     ` : ''}
 
