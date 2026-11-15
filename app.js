@@ -12,10 +12,16 @@ const TODAY       = new Date().toISOString().slice(0, 10);
 
 // Preference order — first match from your account wins
 const MODEL_PRIORITY = [
-  'llama3-70b-8192',
-  'llama-3.1-70b-versatile',
   'llama-3.3-70b-versatile',
+  'openai/gpt-oss-120b',
+  'qwen/qwen3.8-27b',
+  'qwen-qwq-32b',
+  'deepseek-r1-distill-llama-70b',
+  'llama-3.1-70b-versatile',
+  'openai/gpt-oss-20b',
   'llama-3.1-8b-instant',
+  'qwen-2.5-32b',
+  'llama3-70b-8192',
   'llama3-8b-8192',
   'mixtral-8x7b-32768',
   'gemma2-9b-it',
@@ -165,6 +171,51 @@ function formatDateLabel(dateStr) {
 }
 
 // ── Fetch model list live from Groq ──────────────────────────────
+function isExcludedModel(id) {
+  const lower = id.toLowerCase();
+  return lower.includes('whisper') ||
+    lower.includes('tts') ||
+    lower.includes('orpheus') ||
+    lower.includes('audio') ||
+    lower.includes('speech') ||
+    lower.includes('guard') ||
+    lower.includes('safeguard') ||
+    lower.includes('embedding') ||
+    lower.includes('vision') ||
+    lower.includes('tool-use');
+}
+
+function scoreModelHeuristic(id) {
+  let score = 0;
+  const lower = id.toLowerCase();
+  if (lower.includes('allam')) score -= 60; // regional specialized model
+  if (lower.includes('120b')) score += 100;
+  else if (lower.includes('70b')) score += 80;
+  else if (lower.includes('32b')) score += 60;
+  else if (lower.includes('27b')) score += 55;
+  else if (lower.includes('20b')) score += 50;
+  else if (lower.includes('8b')) score += 30;
+  else if (lower.includes('7b')) score += 10;
+
+  if (lower.includes('llama-3.3') || lower.includes('llama-3.1')) score += 40;
+  else if (lower.includes('llama')) score += 30;
+  else if (lower.includes('gpt-oss') || lower.includes('gpt')) score += 35;
+  else if (lower.includes('qwen')) score += 30;
+  else if (lower.includes('mixtral')) score += 25;
+  else if (lower.includes('gemma')) score += 20;
+
+  return score;
+}
+
+function selectBestModel(available) {
+  if (!available || !available.length) return '';
+  for (const pri of MODEL_PRIORITY) {
+    if (available.includes(pri)) return pri;
+  }
+  const ranked = [...available].sort((a, b) => scoreModelHeuristic(b) - scoreModelHeuristic(a));
+  return ranked[0] || '';
+}
+
 async function loadModels(key) {
   S.modelsLoading = true; S.availableModels = []; S.activeModel = ''; render();
   try {
@@ -173,25 +224,17 @@ async function loadModels(key) {
     });
     if (!res.ok) { S.apiKeyValid = false; S.modelsLoading = false; render(); return; }
     const data = await res.json();
-    // Only keep text generation models (exclude whisper/tts/vision/guard)
+    // Only keep text generation models (exclude whisper/tts/vision/guard/audio)
     S.availableModels = (data.data || [])
       .map(m => m.id)
-      .filter(id =>
-        !id.includes('whisper') &&
-        !id.includes('tts') &&
-        !id.includes('distil') &&
-        !id.includes('guard') &&
-        !id.includes('vision') &&
-        !id.includes('tool-use') // preview models sometimes restricted
-      )
+      .filter(id => !isExcludedModel(id))
       .sort();
 
-    // Pick best model from priority list, fall back to first available
+    // Pick best model: respect saved choice if valid, else pick top priority / capability
     const saved = sg('active-model');
     S.activeModel =
-      (saved && S.availableModels.includes(saved)) ? saved :
-      MODEL_PRIORITY.find(m => S.availableModels.includes(m)) ||
-      S.availableModels[0] || '';
+      (saved && S.availableModels.includes(saved) && !isExcludedModel(saved)) ? saved :
+      selectBestModel(S.availableModels);
 
     ss('active-model', S.activeModel);
     S.apiKeyValid = true;
@@ -807,21 +850,27 @@ function findCachedSummary(parsed) {
   if (!parsed) return null;
   const canonicalKey = getCanonicalKey(parsed);
 
+  let cached = null;
   // 1. Direct match from persistent url-cache
   if (canonicalKey) {
     const direct = sg('url-cache:' + canonicalKey);
-    if (direct) return direct;
+    if (direct) cached = direct;
   }
 
   // 2. Search in S.urlSummaries
-  if (Array.isArray(S.urlSummaries)) {
+  if (!cached && Array.isArray(S.urlSummaries)) {
     const found = S.urlSummaries.find(s => {
       if (s.canonicalKey && canonicalKey && s.canonicalKey === canonicalKey) return true;
       if (parsed.id && (s.url || '').includes(parsed.id)) return true;
       if (s.url && parsed.url && s.url.trim().toLowerCase() === parsed.url.trim().toLowerCase()) return true;
       return false;
     });
-    if (found) return found;
+    if (found) cached = found;
+  }
+
+  if (cached) {
+    // Auto-repair any older cached summary with placeholder takeaways or non-monotonic timestamps
+    return normalizeSummaryOutput(cached, parsed, cached.title, cached.source, cached.url);
   }
 
   return null;
@@ -1078,44 +1127,118 @@ function getYouTubeDuration(videoId, timeoutMs = 6000) {
 }
 
 function formatSecondsToTimestamp(sec) {
-  const m = Math.floor(sec / 60);
-  const s = Math.floor(sec % 60);
+  const safeSec = Math.max(0, Math.floor(sec || 0));
+  const m = Math.floor(safeSec / 60);
+  const s = Math.floor(safeSec % 60);
   return `${m}:${s < 10 ? '0' : ''}${s}`;
+}
+
+function sanitizeAndDistributeTimestamps(phases, targetDurationSec) {
+  if (!phases || !phases.length) return phases || [];
+  if (!targetDurationSec || targetDurationSec <= 0) return sanitizePhasesWithoutDuration(phases);
+
+  // Extract raw seconds
+  const rawSeconds = phases.map(p => {
+    let s = (typeof p.seconds === 'number' && !isNaN(p.seconds)) ? p.seconds : undefined;
+    if (s === undefined && p.timestamp) s = parseDurationToSeconds(p.timestamp);
+    if (s === undefined && p.timeRange) {
+      const parts = String(p.timeRange).split('-');
+      if (parts[0]) s = parseDurationToSeconds(parts[0]);
+    }
+    return s !== undefined ? s : 0;
+  });
+
+  // Check monotonicity: is every timestamp strictly greater than previous, and not clustered?
+  let isStrictlyMonotonic = true;
+  for (let i = 1; i < rawSeconds.length; i++) {
+    if (rawSeconds[i] <= rawSeconds[i - 1]) {
+      isStrictlyMonotonic = false;
+      break;
+    }
+  }
+
+  if (isStrictlyMonotonic && rawSeconds.length > 1) {
+    const span = rawSeconds[rawSeconds.length - 1] - rawSeconds[0];
+    if (span < targetDurationSec * 0.25) {
+      isStrictlyMonotonic = false; // clustered in small chunk
+    }
+  }
+
+  const k = phases.length;
+
+  if (!isStrictlyMonotonic) {
+    // Redistribute evenly across targetDurationSec to eliminate duplicate/backward timestamps
+    return phases.map((p, i) => {
+      const startSec = Math.floor((i * targetDurationSec) / k);
+      const endSec = (i === k - 1) ? targetDurationSec : Math.floor(((i + 1) * targetDurationSec) / k);
+      return {
+        ...p,
+        seconds: startSec,
+        timestamp: formatSecondsToTimestamp(startSec),
+        timeRange: `${formatSecondsToTimestamp(startSec)} - ${formatSecondsToTimestamp(endSec)}`
+      };
+    });
+  }
+
+  // If already monotonic, scale if maxSec exceeds targetDurationSec or differs significantly
+  let maxSec = rawSeconds[rawSeconds.length - 1];
+  const ratio = (maxSec > 0 && maxSec > targetDurationSec) ? (targetDurationSec / maxSec) : 1;
+
+  return phases.map((p, i) => {
+    const startSec = Math.floor(rawSeconds[i] * ratio);
+    let nextStart = (i + 1 < rawSeconds.length)
+      ? Math.floor(rawSeconds[i + 1] * ratio)
+      : targetDurationSec;
+
+    if (nextStart <= startSec) {
+      nextStart = Math.min(targetDurationSec, startSec + 30);
+    }
+    if (i === rawSeconds.length - 1) {
+      nextStart = Math.max(startSec + 1, targetDurationSec);
+    }
+
+    return {
+      ...p,
+      seconds: startSec,
+      timestamp: formatSecondsToTimestamp(startSec),
+      timeRange: `${formatSecondsToTimestamp(startSec)} - ${formatSecondsToTimestamp(nextStart)}`
+    };
+  });
+}
+
+function sanitizePhasesWithoutDuration(phases) {
+  let prevSec = 0;
+  return phases.map((p, i) => {
+    let sec = (typeof p.seconds === 'number' && !isNaN(p.seconds)) ? p.seconds : undefined;
+    if (sec === undefined && p.timestamp) sec = parseDurationToSeconds(p.timestamp);
+    if (sec === undefined || sec <= prevSec) {
+      sec = (i === 0) ? 0 : prevSec + 120;
+    }
+    prevSec = sec;
+    const startStr = formatSecondsToTimestamp(sec);
+    let endStr = '';
+    if (p.timeRange) {
+      const parts = String(p.timeRange).split('-');
+      if (parts[1]) {
+        const endSec = parseDurationToSeconds(parts[1]);
+        if (endSec && endSec > sec) endStr = formatSecondsToTimestamp(endSec);
+      }
+    }
+    if (!endStr) {
+      endStr = formatSecondsToTimestamp(sec + 150);
+    }
+    return {
+      ...p,
+      seconds: sec,
+      timestamp: startStr,
+      timeRange: `${startStr} - ${endStr}`
+    };
+  });
 }
 
 function scalePhasesToDuration(phases, targetDurationSec) {
   if (!phases || !phases.length || !targetDurationSec) return phases;
-  
-  let currentMax = 0;
-  phases.forEach(p => {
-    if (typeof p.seconds === 'number' && p.seconds > currentMax) currentMax = p.seconds;
-    if (p.timeRange) {
-      const parts = p.timeRange.split('-');
-      if (parts[1]) {
-        const sec = parseDurationToSeconds(parts[1]);
-        if (sec && sec > currentMax) currentMax = sec;
-      }
-    }
-  });
-
-  if (currentMax <= targetDurationSec && currentMax > targetDurationSec * 0.75) {
-    return phases; // Already within realistic bounds
-  }
-
-  const ratio = currentMax > 0 ? (targetDurationSec / currentMax) : 1;
-
-  return phases.map((p, i) => {
-    const newStartSec = Math.floor((p.seconds || 0) * ratio);
-    const nextPhase = phases[i + 1];
-    const nextStartSec = nextPhase ? Math.floor((nextPhase.seconds || 0) * ratio) : targetDurationSec;
-    const newRange = `${formatSecondsToTimestamp(newStartSec)} - ${formatSecondsToTimestamp(nextStartSec)}`;
-    return {
-      ...p,
-      seconds: newStartSec,
-      timestamp: formatSecondsToTimestamp(newStartSec),
-      timeRange: newRange
-    };
-  });
+  return sanitizeAndDistributeTimestamps(phases, targetDurationSec);
 }
 
 function adjustSummaryDuration(cardId) {
@@ -1229,45 +1352,133 @@ function normalizeSummaryOutput(raw, parsed, cleanTitle, videoAuthor, url) {
   res.createdAt = res.createdAt || new Date().toISOString();
   res.id = res.id || ('sum-' + Date.now());
 
-  // Ensure phases array
-  if (!Array.isArray(res.phases)) res.phases = [];
+  // 1. Ensure meaningful overview
+  if (!res.overview || typeof res.overview !== 'string' || res.overview.length < 20) {
+    res.overview = `Comprehensive analysis and breakdown of "${res.title || 'this content'}" by ${res.source || 'the author'}, detailing core workflows, key techniques, and architectural takeaways.`;
+  }
 
-  // Filter out placeholder texts & compute seconds + snapshotUrl
-  const placeholderRegex = /^(opening context|first main point|second main point|third main point|closing takeaway|insight \d|hook|phase name)/i;
-  res.phases = res.phases.filter(p => {
+  // 2. Resolve target duration
+  const targetDurationSec = parseDurationToSeconds(S.urlDuration) || parseDurationToSeconds(res.duration) || 0;
+  if (targetDurationSec > 0) {
+    res.duration = formatSecondsToTimestamp(targetDurationSec);
+  }
+
+  // 3. Filter placeholder and empty phases
+  if (!Array.isArray(res.phases)) res.phases = [];
+  const placeholderRegex = /^(opening context|first main point|second main point|third main point|closing takeaway|insight \d|hook|phase name|chapter \d|section \d)$/i;
+
+  let validPhases = res.phases.filter(p => {
+    if (!p || typeof p !== 'object') return false;
     const t = (p.title || '').trim();
     const s = (p.summary || '').trim();
+    if (!t && !s) return false;
     return !placeholderRegex.test(t) && !placeholderRegex.test(s);
-  }).map((p, idx) => {
-    let sec = (typeof p.seconds === 'number') ? p.seconds : undefined;
-    if (sec === undefined && p.timestamp) {
-      const parts = String(p.timestamp).split(':').map(Number);
-      if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-        sec = parts[0] * 60 + parts[1];
-      } else if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
-        sec = parts[0] * 3600 + parts[1] * 60 + parts[2];
+  });
+
+  // Deduplicate redundant/repetitive phases
+  const dedupedPhases = [];
+  for (const p of validPhases) {
+    const normTitle = (p.title || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const isDup = dedupedPhases.some(prev => {
+      const prevNorm = (prev.title || '').toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
+      if (prevNorm === normTitle) return true;
+      if (normTitle.length > 12 && (prevNorm.includes(normTitle) || normTitle.includes(prevNorm))) return true;
+      if (prev.summary && p.summary && prev.summary.trim() === p.summary.trim()) return true;
+      return false;
+    });
+
+    if (!isDup) {
+      dedupedPhases.push(p);
+    }
+  }
+
+  if (dedupedPhases.length > 0) {
+    validPhases = dedupedPhases;
+  }
+
+  // 4. Sanitize and distribute timestamps cleanly (eliminates 3:08 - 2:55 and 2:55 - 2:55)
+  if (validPhases.length > 0 && targetDurationSec > 0) {
+    validPhases = sanitizeAndDistributeTimestamps(validPhases, targetDurationSec);
+  } else if (validPhases.length > 0) {
+    validPhases = sanitizePhasesWithoutDuration(validPhases);
+  }
+
+  // Clean subPoints and attach snapshot URLs
+  const yId = (parsed.platform === 'youtube' && parsed.id) ? parsed.id : null;
+  res.phases = validPhases.map((p, idx) => {
+    let cleanSub = [];
+    if (Array.isArray(p.subPoints)) {
+      cleanSub = p.subPoints
+        .map(sp => String(sp || '').trim())
+        .filter(sp => {
+          if (sp.length < 10) return false;
+          if (placeholderRegex.test(sp)) return false;
+          if (/^specific actionable detail/i.test(sp)) return false;
+          if (/^specific detail/i.test(sp)) return false;
+          return true;
+        });
+    }
+    // If all subPoints were placeholders or empty, derive from phase summary sentences
+    if (cleanSub.length === 0 && p.summary && p.summary.length > 25) {
+      const sentences = p.summary.split(/(?<=[.?!])\s+/).filter(s => s.length > 15 && !placeholderRegex.test(s));
+      if (sentences.length > 0) {
+        cleanSub = sentences.slice(0, 2);
       }
     }
-    const finalSec = sec !== undefined ? sec : 0;
-    const yId = (parsed.platform === 'youtube' && parsed.id) ? parsed.id : null;
     return {
       ...p,
-      seconds: finalSec,
-      snapshotUrl: getPhaseSnapshotUrl({ ...p, seconds: finalSec }, yId, idx)
+      subPoints: cleanSub,
+      snapshotUrl: getPhaseSnapshotUrl(p, yId, idx)
     };
   });
 
-  // Scale phases proportionally if they exceed duration
-  const targetDurationSec = parseDurationToSeconds(S.urlDuration) || parseDurationToSeconds(res.duration);
-  if (targetDurationSec && targetDurationSec > 0 && res.phases.length > 0) {
-    res.duration = formatSecondsToTimestamp(targetDurationSec);
-    res.phases = scalePhasesToDuration(res.phases, targetDurationSec);
-    const yId = (parsed.platform === 'youtube' && parsed.id) ? parsed.id : null;
-    res.phases = res.phases.map((p, idx) => ({
-      ...p,
-      snapshotUrl: getPhaseSnapshotUrl(p, yId, idx)
-    }));
+  // 5. Strictly filter out placeholder takeaways (e.g. "Core principle 1", "Core principle 2")
+  const placeholderTakeawayRegex = /^(core principle|key takeaway|takeaway|insight|rule of thumb|lesson)(\s*(or|and)\s*insight)?(\s*#?\d+)?$/i;
+  let cleanTakeaways = (Array.isArray(res.takeaways) ? res.takeaways : [])
+    .map(t => String(t || '').trim())
+    .filter(t => {
+      if (t.length < 15) return false;
+      if (placeholderTakeawayRegex.test(t)) return false;
+      if (/^actionable takeaway\s*\d*$/i.test(t)) return false;
+      if (/^core principle or insight/i.test(t)) return false;
+      return true;
+    });
+
+  // If takeaways are empty or were all placeholders, derive rich takeaways from phases/subpoints
+  if (cleanTakeaways.length < 2 && res.phases.length > 0) {
+    const derived = [];
+    res.phases.forEach(p => {
+      if (Array.isArray(p.subPoints)) {
+        p.subPoints.forEach(sp => {
+          if (sp && sp.length > 25 && !placeholderTakeawayRegex.test(sp) && derived.length < 4) {
+            derived.push(sp);
+          }
+        });
+      }
+    });
+    if (derived.length < 3) {
+      res.phases.forEach(p => {
+        if (p.summary && p.summary.length > 30 && !derived.includes(p.summary) && derived.length < 4) {
+          derived.push(p.summary);
+        }
+      });
+    }
+    if (derived.length >= 2) {
+      cleanTakeaways = derived;
+    }
   }
+
+  // If still empty, derive from overview sentences
+  if (cleanTakeaways.length === 0 && res.overview && res.overview.length > 35) {
+    const sentences = res.overview.split(/(?<=[.?!])\s+/).filter(s => s.length > 25);
+    if (sentences.length > 0) cleanTakeaways = sentences.slice(0, 3);
+  }
+
+  res.takeaways = cleanTakeaways;
 
   // Ensure points array exists for backwards compatibility
   if (!Array.isArray(res.points) || res.points.length === 0) {
@@ -1281,9 +1492,6 @@ function normalizeSummaryOutput(raw, parsed, cleanTitle, videoAuthor, url) {
       res.points = [];
     }
   }
-
-  // Ensure takeaways array
-  if (!Array.isArray(res.takeaways)) res.takeaways = [];
 
   return res;
 }
@@ -1470,46 +1678,70 @@ async function summarizeURL(forceRefresh = false) {
   const resolvedDurationSec = userDurationSec || detectedDurationSec;
   const resolvedDurationStr = resolvedDurationSec ? formatSecondsToTimestamp(resolvedDurationSec) : null;
 
-  // Compute ideal phase count: 1 phase per ~2.5 minutes, minimum 2, no hard cap
-  const numPhases = resolvedDurationSec
-    ? Math.max(2, Math.round(resolvedDurationSec / 150))
-    : null; // Let model decide if we have no duration info
+  // Compute ideal phase count: 3 to 5 phases max to prevent models from generating repetitive filler
+  let numPhases = null;
+  if (resolvedDurationSec) {
+    if (resolvedDurationSec <= 300) numPhases = 2;
+    else if (resolvedDurationSec <= 900) numPhases = 3;
+    else if (resolvedDurationSec <= 1800) numPhases = 4;
+    else numPhases = 5;
+  }
+
+  // Pre-fetch text content/description for videos, articles, github repos, or papers via Jina Reader
+  let pageContent = '';
+  try {
+    const fetchTargetUrl = (parsed.platform === 'youtube' && parsed.id)
+      ? `https://www.youtube.com/watch?v=${parsed.id}`
+      : url;
+    const jinaRes = await fetch(`https://r.jina.ai/${encodeURIComponent(fetchTargetUrl)}`, {
+      headers: { 'Accept': 'text/plain' }
+    });
+    if (jinaRes.ok) {
+      const fullText = await jinaRes.text();
+      if (fullText && fullText.length > 150 && !fullText.includes('403 Forbidden') && !fullText.includes('AbuseAlleviationError')) {
+        pageContent = fullText.slice(0, 8000);
+      }
+    }
+  } catch {}
 
   const durationInstruction = resolvedDurationSec
     ? `ACTUAL VIDEO DURATION: ${resolvedDurationStr} (${resolvedDurationSec} seconds total).
-REQUIRED NUMBER OF PHASES: ${numPhases} — one per roughly ${Math.round(resolvedDurationSec / numPhases)} seconds.
-ALL phase timestamps MUST be strictly within 0:00 and ${resolvedDurationStr}.
-The final phase MUST end exactly at ${resolvedDurationStr}.
-Distribute phases evenly across the full runtime — do NOT cluster them all in the first few minutes.
-NEVER generate any timestamp beyond ${resolvedDurationStr}.`
-    : `PHASE SIZING RULES (no duration provided):
-- Infer realistic video length from title, channel and format.
-- Generate one phase per roughly 2-3 minutes of estimated runtime.
-- Every timestamp MUST stay within the estimated video duration.
-- The final phase MUST conclude at the estimated end time.`;
+REQUIRED NUMBER OF PHASES: Exactly ${numPhases} phases evenly distributed across the duration.
+CHRONOLOGICAL TIMELINE RULES:
+- Phase 1 MUST start at 0:00 (seconds: 0).
+- Every subsequent phase start time MUST be strictly greater than the previous phase (Phase 1 start < Phase 2 start < Phase 3 start).
+- For each phase, "timeRange" must be "START - END" (e.g. "0:00 - 4:15") where START is strictly earlier than END.
+- NEVER repeat identical start timestamps across phases.
+- The final phase MUST conclude at ${resolvedDurationStr}.
+- STRICT TOPIC DIVERSITY: Each phase must explore a distinct technical topic (e.g. Architecture/Philosophy, Setup & Workflows, Production Best Practices, Practical Pitfalls). NEVER generate parallel duplicate phases like "for engineers" vs "for researchers".`
+    : `PHASE SIZING RULES:
+- Generate 3 to 4 chronological phases covering the beginning, middle, and conclusion of the material.
+- Every timestamp MUST be strictly sequential with START strictly earlier than END.`;
 
   const prompt = isVideo
-    ? `You are an elite video summarizer and research analyst. Produce an authoritative, comprehensive, deeply technical and highly structured summary of this video:
+    ? `You are an elite video summarizer and research analyst. Produce an authoritative, comprehensive, deeply technical, and highly structured summary of this video:
 URL: ${url}
 Title: "${cleanTitle || 'Video'}"
 ${videoAuthor ? `Channel / Creator: "${videoAuthor}"` : ''}
-
+${pageContent ? `\nEXTRACTED VIDEO TRANSCRIPT, DESCRIPTION & DETAILS:\n${pageContent}\n` : ''}
 ${durationInstruction}
 
-GOAL: Produce an insightful, structured summary that feels like an expert breakdown.
-1. Executive Overview: 2-3 sentences explaining what this video is about, the creator's core methodology or thesis, and who benefits from it.
-2. Key Phases / Chapters: Break down the video into sequential phases matching the actual duration:
-   - "title": Descriptive, meaningful chapter name
-   - "timeRange": e.g. "0:00 - 1:30" (MUST strictly stay within actual video length)
+GOAL: Produce an insightful, structured technical breakdown:
+1. Executive Overview: 2-3 detailed sentences explaining the core subject matter, the creator's central thesis/methodology, and who benefits most from these techniques.
+2. Key Phases / Chapters: Break down the video into ${numPhases || 4} sequential phases:
+   - "title": Specific, descriptive chapter name (e.g. "Architecture & Context Management", "Terminal Execution & Tool Approvals")
+   - "timeRange": Strictly sequential range e.g. "0:00 - 4:15"
    - "timestamp": Start timestamp e.g. "0:00"
    - "seconds": Start time in seconds (integer)
-   - "summary": 2-3 sentences explaining the concepts, tools, or techniques demonstrated
-   - "subPoints": 2-3 specific actionable sub-points, settings, workflows, or rules of thumb mentioned
-3. Key Takeaways: 3-4 bulleted core principles, rules of thumb, or key lessons.
+   - "summary": 2-3 substantive sentences detailing the concrete workflows, architecture, or tools demonstrated
+   - "subPoints": 2-3 specific actionable techniques, settings, CLI flags, rules of thumb, or trade-offs
+3. Key Takeaways: 3 to 4 concrete, actionable principles or best practices.
+   - Each takeaway MUST be a full descriptive sentence (at least 12 words) describing a concrete practice, technical standard, or optimization rule.
+   - FORBIDDEN: NEVER write generic placeholders like "Core principle 1", "Core principle 2", "Takeaway 1", or "Key rule". State the actual technical recommendation!
 4. STRICT FORBIDDEN LIST:
    - NEVER use placeholder text: "opening context", "first main point", "second main point", "hook", "insight 1", "key takeaway", "closing thoughts".
-   - NEVER write vague or empty sentences. Every single point must contain real domain concepts, instructions, or insights.
-   - NEVER use ellipses (...) or placeholder brackets [...] in any array or object. Output strictly valid standard JSON with complete string values.
+   - NEVER generate repetitive phase titles or duplicate variations.
+   - NEVER output duplicate or backward timestamps.
 
 Return ONLY valid JSON (no markdown fences, no extra text):
 {
@@ -1518,23 +1750,23 @@ Return ONLY valid JSON (no markdown fences, no extra text):
   "type": "${parsed.type}",
   "url": "${url}",
   "source": "${(videoAuthor || 'Creator').replace(/"/g, '\\"')}",
-  "duration": "${resolvedDurationStr || 'realistic duration e.g. 4:06 or 12:30'}",
-  "overview": "2-3 sentence executive overview of what this video teaches and who it is for",
+  "duration": "${resolvedDurationStr || '15:00'}",
+  "overview": "Comprehensive 2-3 sentence executive overview explaining the key concepts and significance",
   "takeaways": [
-    "Core principle or insight 1",
-    "Core principle or insight 2",
-    "Core principle or insight 3"
+    "A concrete workflow standard or architecture principle demonstrated in the material",
+    "A specific best practice, CLI configuration, or implementation pattern",
+    "A key testing, verification, or production reliability guideline"
   ],
   "phases": [
     {
-      "title": "Phase Name",
-      "timeRange": "0:00 - 1:30",
+      "title": "Specific Technical Chapter Title",
+      "timeRange": "0:00 - 4:15",
       "timestamp": "0:00",
       "seconds": 0,
-      "summary": "Detailed summary of what happens in this phase without trailing dots",
+      "summary": "Detailed technical explanation of what happens in this phase with specific concepts and mechanisms",
       "subPoints": [
-        "Specific actionable detail or technique A",
-        "Specific actionable detail or technique B"
+        "Concrete actionable technique, rule of thumb, or configuration",
+        "Specific developer workflow, command, or architectural consideration"
       ]
     }
   ]
@@ -1543,12 +1775,13 @@ Return ONLY valid JSON (no markdown fences, no extra text):
 URL: ${url}
 Title: "${cleanTitle || 'Page'}"
 ${videoAuthor ? `Author/Source: "${videoAuthor}"` : ''}
+${pageContent ? `\nEXTRACTED PAGE CONTENT:\n${pageContent}\n` : ''}
 
-GOAL: Produce an authoritative, comprehensive summary.
-1. Executive Overview: 2-3 sentences explaining the background, main thesis, and significance.
-2. Key Sections / Topics: 4 to 6 detailed sections, each with a title, summary, and 2-3 specific sub-points.
-3. Key Takeaways: 3-4 actionable insights or conclusions.
-4. FORBIDDEN: Do not use placeholders, generic phrases, ellipses (...), or placeholder brackets [...].
+GOAL: Produce an authoritative, comprehensive summary directly reflecting the content.
+1. Executive Overview: 2-3 sentences explaining the background, main thesis, and practical significance.
+2. Key Sections / Topics: 3 to 5 detailed sections, each with a title, summary, and 2-3 specific sub-points.
+3. Key Takeaways: 3 to 4 concrete, actionable insights or conclusions (each at least 12 words).
+4. FORBIDDEN: Do not use placeholders ("Core principle 1", "Takeaway 1", ellipses, or generic filler).
 
 Return ONLY valid JSON (no markdown fences, no extra text):
 {
@@ -1557,19 +1790,19 @@ Return ONLY valid JSON (no markdown fences, no extra text):
   "type": "${parsed.type}",
   "url": "${url}",
   "source": "${(videoAuthor || 'Author').replace(/"/g, '\\"')}",
-  "overview": "2-3 sentence executive overview of the page content.",
+  "overview": "Comprehensive 2-3 sentence executive overview of the page content.",
   "takeaways": [
-    "Actionable takeaway 1",
-    "Actionable takeaway 2",
-    "Actionable takeaway 3"
+    "Primary technical finding or strategic conclusion from the text",
+    "Specific implementation guideline, methodology, or performance metric",
+    "Actionable recommendation for developers or researchers"
   ],
   "phases": [
     {
       "title": "Section Title",
       "summary": "Detailed section summary explaining key concepts and findings",
       "subPoints": [
-        "Specific detail 1",
-        "Specific detail 2"
+        "Specific finding, data point, or technique",
+        "Implementation detail or operational takeaway"
       ]
     }
   ]
