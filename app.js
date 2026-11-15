@@ -2528,7 +2528,7 @@ function buildFeed() {
                  target="_blank" rel="noopener noreferrer" 
                  class="btn-primary" 
                  style="background:#10b981;border-color:#10b981;color:#fff;text-decoration:none;display:inline-flex;align-items:center;gap:6px;height:32px;font-size:12px;padding:0 12px">
-                <i class="ti ti-external-link"></i> Review on GenAI Architecture Hub ↗
+                <i class="ti ti-external-link"></i> Review &amp; Post on GenAI Architecture Hub ↗
               </a>
               <button class="btn-ghost" style="height:32px;font-size:12px;padding:0 10px" onclick="copyDraftPostJSON()">
                 <i class="ti ti-copy"></i> Copy Post JSON
