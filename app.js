@@ -131,11 +131,57 @@ function getOfficialHub(url = '', source = '', title = '') {
   if (combined.includes('google') || combined.includes('gemini') || combined.includes('deepmind')) return { label: 'Google AI Blog', url: 'https://blog.google/technology/ai/' };
   if (combined.includes('meta') || combined.includes('llama')) return { label: 'Meta AI Blog', url: 'https://ai.meta.com/blog/' };
   if (combined.includes('mistral')) return { label: 'Mistral News', url: 'https://mistral.ai/news/' };
+  if (combined.includes('deepseek')) return { label: 'DeepSeek', url: 'https://www.deepseek.com/' };
   if (combined.includes('huggingface') || combined.includes('hugging face')) return { label: 'Hugging Face Blog', url: 'https://huggingface.co/blog' };
   if (combined.includes('github')) return { label: 'GitHub Trending', url: 'https://github.com/trending' };
   if (combined.includes('arxiv')) return { label: 'arXiv AI Recent', url: 'https://arxiv.org/list/cs.AI/recent' };
+  if (combined.includes('techcrunch')) return { label: 'TechCrunch AI', url: 'https://techcrunch.com/category/artificial-intelligence/' };
+  if (combined.includes('theverge') || combined.includes('the verge')) return { label: 'The Verge AI', url: 'https://www.theverge.com/ai-artificial-intelligence' };
+  if (combined.includes('venturebeat')) return { label: 'VentureBeat AI', url: 'https://venturebeat.com/category/ai/' };
+  if (combined.includes('technologyreview') || combined.includes('mit tech')) return { label: 'MIT Tech Review', url: 'https://www.technologyreview.com/topic/artificial-intelligence/' };
+  if (combined.includes('nvidia')) return { label: 'NVIDIA AI Blog', url: 'https://blogs.nvidia.com/blog/category/deep-learning/' };
   if (combined.includes('ycombinator') || combined.includes('hacker news')) return { label: 'Hacker News', url: 'https://news.ycombinator.com/' };
   return null;
+}
+
+function deriveSource(source = '', url = '', platform = '') {
+  let s = (source || '').trim();
+  const lower = s.toLowerCase();
+  if (!s || lower === 'hacker news' || lower === 'web' || lower === 'news' || lower === 'article') {
+    if (url && !url.includes('google.com/search') && !url.includes('news.ycombinator.com')) {
+      try {
+        const host = new URL(url).hostname.replace(/^www\./, '');
+        const hostMap = {
+          'techcrunch.com': 'TechCrunch',
+          'theverge.com': 'The Verge',
+          'wired.com': 'Wired',
+          'venturebeat.com': 'VentureBeat',
+          'arstechnica.com': 'Ars Technica',
+          'bloomberg.com': 'Bloomberg',
+          'reuters.com': 'Reuters',
+          'technologyreview.com': 'MIT Tech Review',
+          'github.com': 'GitHub',
+          'huggingface.co': 'Hugging Face',
+          'arxiv.org': 'arXiv',
+          'openai.com': 'OpenAI',
+          'anthropic.com': 'Anthropic',
+          'blog.google': 'Google DeepMind',
+          'ai.meta.com': 'Meta AI',
+          'mistral.ai': 'Mistral AI',
+          'deepseek.com': 'DeepSeek',
+          'nvidia.com': 'NVIDIA',
+          'youtube.com': 'YouTube',
+          'x.com': 'X / Twitter',
+          'twitter.com': 'X / Twitter'
+        };
+        for (const [d, name] of Object.entries(hostMap)) {
+          if (host.includes(d)) return name;
+        }
+        if (host) return host;
+      } catch {}
+    }
+  }
+  return s || (platform ? platform.toUpperCase() : 'AI News');
 }
 
 function normalizeDigest(data) {
@@ -146,9 +192,11 @@ function normalizeDigest(data) {
   
   const items = (Array.isArray(rawItems) ? rawItems : []).map(item => {
     const safeUrl = resolveItemLink(item);
+    const safeSource = deriveSource(item.source, item.url || safeUrl, item.platform);
     return {
       ...item,
       url: safeUrl,
+      source: safeSource,
       originalUrl: item.originalUrl || item.url || safeUrl
     };
   });
@@ -269,7 +317,22 @@ async function init() {
 
   S.apiKey       = sg('groq-api-key') || '';
   S.following    = sg('ai-following') || [];
-  S.todayDigest  = normalizeDigest(sg('digest:'+TODAY));
+  
+  // Load cached digest or invalidate if it's the old 2-3 sources bug
+  const cachedDigest = sg('digest:'+TODAY);
+  if (cachedDigest && Array.isArray(cachedDigest.items) && cachedDigest.items.length > 0) {
+    const uniqueSources = new Set(cachedDigest.items.map(i => (i.source || '').toLowerCase().trim()));
+    if (uniqueSources.size <= 3) {
+      // Invalidate legacy digest from previous sessions so fresh diverse news is loaded
+      localStorage.removeItem('digest:'+TODAY);
+      S.todayDigest = null;
+    } else {
+      S.todayDigest = normalizeDigest(cachedDigest);
+    }
+  } else {
+    S.todayDigest = null;
+  }
+
   S.urlSummaries = sg('ai-summaries') || [];
 
   const seedVipassana = {
@@ -671,6 +734,8 @@ async function init() {
     // Auto-summarize if a URL was shared in (after models are loaded)
     if (pending && S.activeModel) {
       setTimeout(() => summarizeURL(), 300);
+    } else if (!S.todayDigest && S.tab === 'feed' && S.activeModel) {
+      fetchDigest();
     }
   }
 }
@@ -1650,36 +1715,76 @@ async function fetchDigest() {
   if (!S.apiKey) { S.showSetup=true; render(); return; }
   S.loading=true; S.loadError=''; render();
 
-  // Pre-fetch real trending stories from free public CORS-enabled feeds
+  // Pre-fetch real trending stories across multiple high-signal, CORS-friendly sources
   let realFeedsContext = '';
   try {
-    const [hnRes, hfRes] = await Promise.allSettled([
-      fetch('https://hn.algolia.com/api/v1/search?query=AI+OR+LLM+OR+GPT&tags=story&hitsPerPage=6'),
-      fetch('https://huggingface.co/api/daily_papers')
+    const [hnRes, hfRes, ghRes] = await Promise.allSettled([
+      fetch('https://hn.algolia.com/api/v1/search_by_date?query=AI+OR+LLM+OR+GPT&tags=story&numericFilters=points>5&hitsPerPage=6'),
+      fetch('https://huggingface.co/api/daily_papers'),
+      fetch('https://api.github.com/search/repositories?q=topic:llm+stars:>100&sort=updated&order=desc&per_page=4', {
+        headers: { 'Accept': 'application/vnd.github.v3+json' }
+      })
     ]);
 
     const realItems = [];
+
+    // 1. Tech Journalism & Community Discussions (extract real publisher domain)
     if (hnRes.status === 'fulfilled' && hnRes.value.ok) {
       const hnData = await hnRes.value.json();
-      (hnData.hits || []).slice(0, 4).forEach(h => {
-        const u = h.url || `https://news.ycombinator.com/item?id=${h.objectID}`;
-        if (h.title && u) {
-          realItems.push(`- Title: "${h.title}" | Platform: "web" | Source: "Hacker News" | Real URL: ${u}`);
+      let hnCount = 0;
+      for (const h of (hnData.hits || [])) {
+        if (!h.title) continue;
+        const externalUrl = h.url || '';
+        let sourceName = 'Hacker News';
+        let platform = 'web';
+        let finalUrl = externalUrl || `https://news.ycombinator.com/item?id=${h.objectID}`;
+
+        if (externalUrl) {
+          try {
+            const host = new URL(externalUrl).hostname.replace(/^www\./, '');
+            if (host.includes('github.com')) { sourceName = 'GitHub'; platform = 'github'; }
+            else if (host.includes('arxiv.org')) { sourceName = 'arXiv'; platform = 'paper'; }
+            else if (host.includes('techcrunch.com')) { sourceName = 'TechCrunch'; }
+            else if (host.includes('theverge.com')) { sourceName = 'The Verge'; }
+            else if (host.includes('venturebeat.com')) { sourceName = 'VentureBeat'; }
+            else if (host.includes('wired.com')) { sourceName = 'Wired'; }
+            else if (host.includes('bloomberg.com')) { sourceName = 'Bloomberg'; }
+            else if (host.includes('reuters.com')) { sourceName = 'Reuters'; }
+            else if (host.includes('technologyreview.com')) { sourceName = 'MIT Tech Review'; }
+            else if (host.includes('openai.com')) { sourceName = 'OpenAI'; }
+            else if (host.includes('anthropic.com')) { sourceName = 'Anthropic'; }
+            else if (host.includes('blog.google')) { sourceName = 'Google DeepMind'; }
+            else { sourceName = host; }
+          } catch {}
         }
-      });
+
+        realItems.push(`- Title: "${h.title}" | Platform: "${platform}" | Source: "${sourceName}" | Real URL: ${finalUrl}`);
+        hnCount++;
+        if (hnCount >= 2) break; // Maximum 2 distinct items from HN search
+      }
     }
 
+    // 2. Open-Source AI Repositories from GitHub
+    if (ghRes.status === 'fulfilled' && ghRes.value.ok) {
+      const ghData = await ghRes.value.json();
+      const topRepo = (ghData.items || [])[0];
+      if (topRepo && topRepo.name && topRepo.html_url) {
+        const repoDesc = topRepo.description ? ` (${topRepo.description.slice(0, 80)}...)` : '';
+        realItems.push(`- Title: "${topRepo.name}${repoDesc}" | Platform: "github" | Source: "GitHub (${topRepo.owner?.login || 'OpenSource'})" | Real URL: ${topRepo.html_url}`);
+      }
+    }
+
+    // 3. Breakthrough AI Research Papers from Hugging Face / arXiv
     if (hfRes.status === 'fulfilled' && hfRes.value.ok) {
       const hfData = await hfRes.value.json();
-      (hfData || []).slice(0, 4).forEach(p => {
-        if (p.title && p.paper?.id) {
-          realItems.push(`- Title: "${p.title}" | Platform: "paper" | Source: "Hugging Face Daily Papers" | Real URL: https://huggingface.co/papers/${p.paper.id}`);
-        }
-      });
+      const topPaper = (hfData || [])[0];
+      if (topPaper && topPaper.title && topPaper.paper?.id) {
+        realItems.push(`- Title: "${topPaper.title}" | Platform: "paper" | Source: "arXiv / Hugging Face" | Real URL: https://huggingface.co/papers/${topPaper.paper.id}`);
+      }
     }
 
     if (realItems.length > 0) {
-      realFeedsContext = `\nREAL VERIFIED STORIES FROM TODAY (Include these with their exact Real URLs):\n${realItems.join('\n')}\n`;
+      realFeedsContext = `\nREAL VERIFIED SAMPLES FROM TODAY (Use these exact URLs and Sources for their respective categories):\n${realItems.join('\n')}\n`;
     }
   } catch (e) {
     console.warn('Could not pre-fetch live feeds:', e);
@@ -1689,25 +1794,31 @@ async function fetchDigest() {
     ? '\nAlso include latest content from: ' + S.following.map(f=>`${f.platform} @${f.handle}`).join(', ') + '.'
     : '';
 
-  const prompt = `Today is ${TODAY}. Generate a daily AI news digest of 8 varied trending AI/ML items from the last 24 hours.
-Mix of:
-- Breaking AI model or product announcements (OpenAI, Anthropic, Google, Meta, Mistral, xAI)
-- Trending GitHub repos for AI/ML
-- New research papers (arXiv, Hugging Face)
-- Viral AI posts on X/Twitter
-- YouTube AI videos trending
-- AI startup/funding news
-- Hacker News top AI threads${followStr}
+  const prompt = `Today is ${TODAY}. Generate a daily AI news digest of 8 varied, high-impact AI/ML developments from the last 24 hours.
+
+MANDATORY SOURCE DIVERSITY REQUIREMENT:
+- Every single item in the 8 items MUST come from a DIFFERENT source / organization.
+- NEVER have multiple items from the same source (e.g. no more than 1 item from Google, 1 from OpenAI, 1 from GitHub, 1 from TechCrunch, etc.).
+- You MUST cover each of the following 8 distinct sectors (exactly 1 item per sector):
+  1. Frontier AI Lab (Source: OpenAI, Anthropic, Google DeepMind, or Meta AI)
+  2. Open-Source AI Model / Architecture (Source: Mistral AI, DeepSeek, Qwen, or Ollama)
+  3. Trending AI Developer Tool / Repo (Source: GitHub repository, e.g. vLLM, LangChain, or verified repo)
+  4. Breakthrough Research Paper (Source: arXiv or Hugging Face Papers)
+  5. Enterprise AI, Hardware & Chips (Source: NVIDIA, AMD, TSMC, or Cloud AI infrastructure)
+  6. AI Application / Product / Startup (Source: Perplexity, Cursor, ElevenLabs, Runway, etc.)
+  7. Tech Journalism & Industry Analysis (Source: TechCrunch, The Verge, Reuters, Wired, or MIT Tech Review)
+  8. Community Insight or Video Breakdown (Source: YouTube AI channel, X/Twitter, or Hacker News)
+${followStr}
 ${realFeedsContext}
-URL GENERATION RULES (CRITICAL):
-1. For items from the REAL VERIFIED STORIES list above, PRESERVE their exact Real URL.
-2. For model/product announcements or news articles without a verified exact URL, ALWAYS use a Google News search URL: "https://news.google.com/search?q=KEYWORDS" (e.g. "https://news.google.com/search?q=Anthropic+Claude+4.5" or "https://news.google.com/search?q=OpenAI+GPT-5").
-3. For GitHub repos: Use "https://github.com/search?q=KEYWORDS&type=repositories" or the exact real repo URL.
-4. For research papers without an exact link: Use "https://arxiv.org/search/?query=KEYWORDS&searchtype=all".
-5. For YouTube videos: Use "https://www.youtube.com/results?search_query=KEYWORDS".
+URL GENERATION RULES:
+1. For items matching the REAL VERIFIED SAMPLES above, use their exact Real URL and clean Source.
+2. For major announcements or news articles without a verified exact link, ALWAYS use a Google News search URL: "https://news.google.com/search?q=KEYWORDS" (e.g. "https://news.google.com/search?q=DeepSeek+V3" or "https://news.google.com/search?q=Google+Gemini+2.0").
+3. For GitHub repos: Use verified repo URL or "https://github.com/search?q=KEYWORDS&type=repositories".
+4. For research papers: Use verified paper URL or "https://arxiv.org/search/?query=KEYWORDS&searchtype=all".
+5. For YouTube tutorials/breakdowns: Use "https://www.youtube.com/results?search_query=KEYWORDS".
 6. STRICTLY FORBIDDEN: NEVER invent non-existent deep slugs like "https://www.anthropic.com/news/claude-4-5" or fake blog paths that cause 404 errors. Every URL MUST open successfully.
 
-You MUST return 8 items in the "items" array, numbered item-1 to item-8. Do not stop early. Each item needs 2-3 key insights.
+You MUST return exactly 8 items in the "items" array, numbered item-1 to item-8. Each item must have a unique, accurate "source" name.
 
 Return ONLY this JSON:
 {
@@ -1715,13 +1826,13 @@ Return ONLY this JSON:
   "items": [
     {
       "id": "item-1",
-      "title": "...",
+      "title": "Clear, informative headline",
       "url": "https://...",
       "platform": "twitter|github|youtube|web|paper|instagram|facebook",
-      "type": "video|article|repo|post|paper|announcement|thread",
-      "source": "author or site name",
+      "type": "announcement|repo|paper|article|video|post|analysis",
+      "source": "Exact source/organization name (e.g. Google DeepMind, TechCrunch, OpenAI, GitHub, NVIDIA, etc.)",
       "importance": "high|medium",
-      "points": ["insight 1", "insight 2", "insight 3"]
+      "points": ["Key insight 1", "Key insight 2", "Key insight 3"]
     }
   ]
 }`;
